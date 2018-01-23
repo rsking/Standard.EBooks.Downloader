@@ -329,3 +329,4 @@ __pycache__/
 # End of https://www.gitignore.io/api/windows,visualstudio,visualstudiocode
 
 *.epub
+*.epub3
