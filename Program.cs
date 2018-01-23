@@ -22,17 +22,20 @@
                     var any = false;
                     foreach (var value in ProcessPage(page))
                     {
-                        var epub = ProcessBook(value);
+                        var epubs = ProcessBook(value);
 
-                        if (epub != null)
+                        if (epubs != null)
                         {
-                            // down load this
-                            var epubInfo = EpubInfo.Parse(DownloadEpub(epub, ".\\"));
-
-                            if (calibreLibrary.UpdateIfExists(epubInfo))
+                            foreach (var epub in epubs)
                             {
-                                System.Console.WriteLine("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
-                                System.IO.File.Delete(epubInfo.Path);
+                                // download this
+                                var epubInfo = EpubInfo.Parse(DownloadEpub(epub, ".\\"));
+
+                                if (calibreLibrary.UpdateIfExists(epubInfo))
+                                {
+                                    System.Console.WriteLine("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
+                                    System.IO.File.Delete(epubInfo.Path);
+                                }
                             }
                         }
 
@@ -97,7 +100,7 @@
             }
         }
 
-        private static Uri ProcessBook(Uri uri)
+        private static IEnumerable<Uri> ProcessBook(Uri uri)
         {
             Console.WriteLine("\tProcessing book {0}", uri.Segments.Last());
             string html = null;
@@ -117,12 +120,13 @@
 
             if (document.DocumentNode != null)
             {
-                var node = document.DocumentNode.SelectSingleNode("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']");
-                var link = node.GetAttributeValue("href", string.Empty);
-                return new Uri(uri, link);
+                var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']");
+                foreach (var node in nodes)
+                {
+                    var link = node.GetAttributeValue("href", string.Empty);
+                    yield return new Uri(uri, link);
+                }
             }
-
-            return null;
         }
 
         private static string DownloadEpub(Uri uri, string path)
