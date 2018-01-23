@@ -16,11 +16,7 @@ namespace Standard.EBooks.Downloader
         {
             this.Path = path;
 
-            var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder()
-            {
-                DataSource = System.IO.Path.Combine(path, "metadata.db")
-            };
-
+            var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db") };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
             this.connection.Open();
         }
@@ -31,7 +27,8 @@ namespace Standard.EBooks.Downloader
         {
             using (var command = this.connection.CreateCommand())
             {
-                command.CommandText = "SELECT b.path, d.name FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE d.format = 'EPUB' AND a.name = :author AND b.title = :title AND p.name = :publisher";
+                command.CommandText = "SELECT b.path, d.name FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE d.format = :extension AND a.name = :author AND b.title = :title AND p.name = :publisher";
+                command.Parameters.AddWithValue(":extension", info.Extension.ToUpperInvariant());
                 command.Parameters.AddWithValue(":author", info.Authors.First().Replace(',', '|'));
                 command.Parameters.AddWithValue(":title", info.Title);
                 command.Parameters.AddWithValue(":publisher", "Standard EBooks");
@@ -68,6 +65,15 @@ namespace Standard.EBooks.Downloader
 
                 return false;
             }
+        }
+
+        // This code added to correctly implement the disposable pattern.
+        public void Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) below.
+            this.Dispose(true);
+            // TODO: uncomment the following line if the finalizer is overridden below.
+            // GC.SuppressFinalize(this);
         }
 
         private static bool CheckFiles(string source, string destination)
@@ -151,14 +157,5 @@ namespace Standard.EBooks.Downloader
         //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
         //   Dispose(false);
         // }
-
-        // This code added to correctly implement the disposable pattern.
-        public void Dispose()
-        {
-            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-            Dispose(true);
-            // TODO: uncomment the following line if the finalizer is overridden above.
-            // GC.SuppressFinalize(this);
-        }
     }
 }

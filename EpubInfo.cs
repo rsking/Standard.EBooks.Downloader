@@ -8,6 +8,8 @@ namespace Standard.EBooks.Downloader
 
         public string Path { get; private set; }
 
+        public string Extension { get; private set; }
+
         public static EpubInfo Parse(string path)
         {
             // open the zip file
@@ -49,7 +51,7 @@ namespace Standard.EBooks.Downloader
                 }
             }
 
-            return new EpubInfo { Title = title, Authors = authors.ToArray(), Path = path };
+            return new EpubInfo { Title = title, Authors = authors.ToArray(), Path = path, Extension = System.IO.Path.GetExtension(path).TrimStart('.') };
         }
     }
 }
