@@ -1,3 +1,9 @@
+// -----------------------------------------------------------------------
+// <copyright file="CalibreLibrary.cs" company="RossKing">
+// Copyright (c) RossKing. All rights reserved.
+// </copyright>
+// -----------------------------------------------------------------------
+
 namespace Standard.EBooks.Downloader
 {
     using System;
@@ -6,12 +12,19 @@ namespace Standard.EBooks.Downloader
     using System.Text;
     using System.Threading.Tasks;
 
+    /// <summary>
+    /// Represents a <see href="https://calibre-ebook.com/">calibre</see> library.
+    /// </summary>
     public class CalibreLibrary : IDisposable
     {
         private Microsoft.Data.Sqlite.SqliteConnection connection;
 
         private bool disposedValue = false; // To detect redundant calls
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CalibreLibrary" /> class.
+        /// </summary>
+        /// <param name="path">The path.</param>
         public CalibreLibrary(string path)
         {
             this.Path = path;
@@ -21,8 +34,16 @@ namespace Standard.EBooks.Downloader
             this.connection.Open();
         }
 
+        /// <summary>
+        /// Gets the path.
+        /// </summary>
         public string Path { get; private set; }
 
+        /// <summary>
+        /// Updates the EPUB if it exists in the calibre library.
+        /// </summary>
+        /// <param name="info">The EPUB info.</param>
+        /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" /></returns>
         public bool UpdateIfExists(EpubInfo info)
         {
             using (var command = this.connection.CreateCommand())
@@ -67,14 +88,45 @@ namespace Standard.EBooks.Downloader
             }
         }
 
-        // This code added to correctly implement the disposable pattern.
+        /// <summary>
+        /// Disposes this instance.
+        /// </summary>
         public void Dispose()
         {
             // Do not change this code. Put cleanup code in Dispose(bool disposing) below.
             this.Dispose(true);
+
             // TODO: uncomment the following line if the finalizer is overridden below.
-            // GC.SuppressFinalize(this);
+            //// GC.SuppressFinalize(this);
         }
+
+        /// <summary>
+        /// Disposes the unmanaged resource, and optionally managed resources, for this instance.
+        /// </summary>
+        /// <param name="disposing">Set to <see landword="true"/> to dispose managed resources</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!this.disposedValue)
+            {
+                if (disposing)
+                {
+                    if (this.connection != null)
+                    {
+                        this.connection.Dispose();
+                    }
+
+                    this.connection = null;
+                }
+
+                this.disposedValue = true;
+            }
+        }
+
+        //// TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
+        //// ~CalibreLibrary() {
+        ////   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+        ////   Dispose(false);
+        //// }
 
         private static bool CheckFiles(string source, string destination)
         {
@@ -133,29 +185,5 @@ namespace Standard.EBooks.Downloader
                 return (int)value;
             }
         }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposedValue)
-            {
-                if (disposing)
-                {
-                    if (this.connection != null)
-                    {
-                        this.connection.Dispose();
-                    }
-
-                    this.connection = null;
-                }
-
-                disposedValue = true;
-            }
-        }
-
-        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-        // ~CalibreLibrary() {
-        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-        //   Dispose(false);
-        // }
     }
 }

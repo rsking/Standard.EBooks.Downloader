@@ -1,4 +1,10 @@
-﻿namespace Standard.EBooks.Downloader
+﻿// -----------------------------------------------------------------------
+// <copyright file="Program.cs" company="RossKing">
+// Copyright (c) RossKing. All rights reserved.
+// </copyright>
+// -----------------------------------------------------------------------
+
+namespace Standard.EBooks.Downloader
 {
     using System;
     using System.Collections.Generic;
@@ -6,15 +12,22 @@
     using System.Text;
     using System.Threading.Tasks;
 
-    internal class Program
+    /// <summary>
+    /// The main program class.
+    /// </summary>
+    internal static class Program
     {
         private static readonly string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
-        static void Main(string[] args)
+        /// <summary>
+        /// The main entry point.
+        /// </summary>
+        /// <param name="args">The command line arguments.</param>
+        private static void Main(string[] args)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
 
-            using (var calibreLibrary = new CalibreLibrary("C:\\Users\\rskin\\OneDrive\\Calibre Library"))
+            using (var calibreLibrary = new CalibreLibrary(args[0]))
             {
                 var page = 1;
                 while (true)
@@ -22,20 +35,15 @@
                     var any = false;
                     foreach (var value in ProcessPage(page))
                     {
-                        var epubs = ProcessBook(value);
-
-                        if (epubs != null)
+                        foreach (var epub in ProcessBook(value))
                         {
-                            foreach (var epub in epubs)
-                            {
-                                // download this
-                                var epubInfo = EpubInfo.Parse(DownloadEpub(epub, ".\\"));
+                            // download this
+                            var epubInfo = EpubInfo.Parse(DownloadEpub(epub, ".\\"));
 
-                                if (calibreLibrary.UpdateIfExists(epubInfo))
-                                {
-                                    System.Console.WriteLine("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
-                                    System.IO.File.Delete(epubInfo.Path);
-                                }
+                            if (calibreLibrary.UpdateIfExists(epubInfo))
+                            {
+                                System.Console.WriteLine("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
+                                System.IO.File.Delete(epubInfo.Path);
                             }
                         }
 
@@ -62,7 +70,6 @@
                 html = client.DownloadString(pageUri);
             }
 
-            //var html = client.DownloadString(pageUri);
             var document = new HtmlAgilityPack.HtmlDocument();
             document.LoadHtml(html);
 
@@ -92,9 +99,8 @@
 
                 for (int i = 0; i < nodes.Count; i++)
                 {
-                    var node = nodes[i];
                     // get the html attribute
-                    var link = node.GetAttributeValue("href", string.Empty);
+                    var link = nodes[i].GetAttributeValue("href", string.Empty);
                     yield return new Uri(pageUri, link);
                 }
             }
@@ -109,7 +115,6 @@
                 html = client.DownloadString(uri);
             }
 
-            //var html = client.DownloadString(pageUri);
             var document = new HtmlAgilityPack.HtmlDocument();
             document.LoadHtml(html);
 

@@ -1,15 +1,41 @@
+// -----------------------------------------------------------------------
+// <copyright file="EpubInfo.cs" company="RossKing">
+// Copyright (c) RossKing. All rights reserved.
+// </copyright>
+// -----------------------------------------------------------------------
+
 namespace Standard.EBooks.Downloader
 {
+    /// <summary>
+    /// EPUB information.
+    /// </summary>
     public struct EpubInfo
     {
+        /// <summary>
+        /// Gets the authors
+        /// </summary>
         public System.Collections.Generic.IEnumerable<string> Authors { get; private set; }
 
+        /// <summary>
+        /// Gets the title
+        /// </summary>
         public string Title { get; private set; }
 
+        /// <summary>
+        /// Gets the path
+        /// </summary>
         public string Path { get; private set; }
 
+        /// <summary>
+        /// Gets the extension
+        /// </summary>
         public string Extension { get; private set; }
 
+        /// <summary>
+        /// Parses EPUB information from a path.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <returns>The EPUB information.</returns>
         public static EpubInfo Parse(string path)
         {
             // open the zip file
@@ -30,7 +56,7 @@ namespace Standard.EBooks.Downloader
             var document = new System.Xml.XmlDocument();
             document.LoadXml(contents);
             var manager = new System.Xml.XmlNamespaceManager(document.NameTable);
-            manager.AddNamespace("", "http://www.idpf.org/2007/opf");
+            manager.AddNamespace(string.Empty, "http://www.idpf.org/2007/opf");
             manager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
             manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
 
