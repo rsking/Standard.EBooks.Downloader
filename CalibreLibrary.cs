@@ -78,6 +78,7 @@ namespace Standard.EBooks.Downloader
                     if (!CheckFiles(info.Path, fullPath))
                     {
                         // files are not the same. Copy in the new file
+                        System.Console.WriteLine("\tReplacing {0} as files do not match");
                         System.IO.File.Copy(info.Path, fullPath, true);
                     }
 
@@ -135,6 +136,7 @@ namespace Standard.EBooks.Downloader
 
             if (sourceFileInfo.Length != destinationFileInfo.Length)
             {
+                System.Console.WriteLine("\tsource and destination are different lengths");
                 return false;
             }
 
@@ -143,6 +145,7 @@ namespace Standard.EBooks.Downloader
 
             if (sourceHash.Length != destinationHash.Length)
             {
+                System.Console.WriteLine("\tsource and destination hashes are different lengths");
                 return false;
             }
 
@@ -150,6 +153,7 @@ namespace Standard.EBooks.Downloader
             {
                 if (sourceHash[i] != destinationHash[i])
                 {
+                    System.Console.WriteLine("\tsource and destination hashes do not match");
                     return false;
                 }
             }
