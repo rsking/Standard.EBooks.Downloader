@@ -11,12 +11,15 @@ namespace Standard.EBooks.Downloader
     using System.Linq;
     using System.Text;
     using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// Represents a <see href="https://calibre-ebook.com/">calibre</see> library.
     /// </summary>
     public class CalibreLibrary : IDisposable
     {
+        private readonly ILogger logger;
+
         private Microsoft.Data.Sqlite.SqliteConnection connection;
 
         private bool disposedValue = false; // To detect redundant calls
@@ -25,9 +28,11 @@ namespace Standard.EBooks.Downloader
         /// Initializes a new instance of the <see cref="CalibreLibrary" /> class.
         /// </summary>
         /// <param name="path">The path.</param>
-        public CalibreLibrary(string path)
+        /// <param name="logger">The logger.static</param>
+        public CalibreLibrary(string path, ILogger logger)
         {
             this.Path = path;
+            this.logger = logger;
 
             var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db") };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
@@ -75,10 +80,10 @@ namespace Standard.EBooks.Downloader
                 if (System.IO.File.Exists(fullPath))
                 {
                     // see if this has changed at all
-                    if (!CheckFiles(info.Path, fullPath))
+                    if (!CheckFiles(info.Path, fullPath, this.logger))
                     {
                         // files are not the same. Copy in the new file
-                        System.Console.WriteLine("\tReplacing {0} as files do not match");
+                        this.logger.LogInformation("\tReplacing {0} as files do not match");
                         System.IO.File.Copy(info.Path, fullPath, true);
                     }
 
@@ -129,14 +134,14 @@ namespace Standard.EBooks.Downloader
         ////   Dispose(false);
         //// }
 
-        private static bool CheckFiles(string source, string destination)
+        private static bool CheckFiles(string source, string destination, ILogger logger)
         {
             var sourceFileInfo = new System.IO.FileInfo(source);
             var destinationFileInfo = new System.IO.FileInfo(destination);
 
             if (sourceFileInfo.Length != destinationFileInfo.Length)
             {
-                System.Console.WriteLine("\tsource and destination are different lengths");
+                logger.LogInformation("\tsource and destination are different lengths");
                 return false;
             }
 
@@ -145,7 +150,7 @@ namespace Standard.EBooks.Downloader
 
             if (sourceHash.Length != destinationHash.Length)
             {
-                System.Console.WriteLine("\tsource and destination hashes are different lengths");
+                logger.LogInformation("\tsource and destination hashes are different lengths");
                 return false;
             }
 
@@ -153,7 +158,7 @@ namespace Standard.EBooks.Downloader
             {
                 if (sourceHash[i] != destinationHash[i])
                 {
-                    System.Console.WriteLine("\tsource and destination hashes do not match");
+                    logger.LogInformation("\tsource and destination hashes do not match");
                     return false;
                 }
             }

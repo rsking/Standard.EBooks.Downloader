@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.7.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.0.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="2.0.0" />
     <PackageReference Include="Roslynator.Analyzers" Version="1.7.0" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.0.2" />

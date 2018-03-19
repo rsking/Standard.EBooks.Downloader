@@ -11,13 +11,24 @@ namespace Standard.EBooks.Downloader
     using System.Linq;
     using System.Text;
     using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// The main program class.
     /// </summary>
-    internal static class Program
+    internal class Program
     {
         private static readonly string Uri = "https://standardebooks.org/ebooks/?page={0}";
+
+        private static readonly ILoggerFactory LoggerFactory;
+
+        private static readonly ILogger ProgramLogger;
+
+        static Program()
+        {
+            LoggerFactory = new LoggerFactory().AddConsole();
+            ProgramLogger = LoggerFactory.CreateLogger<Program>();
+        }
 
         /// <summary>
         /// The main entry point.
@@ -27,7 +38,7 @@ namespace Standard.EBooks.Downloader
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
 
-            using (var calibreLibrary = new CalibreLibrary(args[0]))
+            using (var calibreLibrary = new CalibreLibrary(args[0], LoggerFactory.CreateLogger<CalibreLibrary>()))
             {
                 var page = 1;
                 while (true)
@@ -42,7 +53,7 @@ namespace Standard.EBooks.Downloader
 
                             if (calibreLibrary.UpdateIfExists(epubInfo))
                             {
-                                System.Console.WriteLine("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
+                                ProgramLogger.LogInformation("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
                                 System.IO.File.Delete(epubInfo.Path);
                             }
                         }
@@ -62,7 +73,7 @@ namespace Standard.EBooks.Downloader
 
         private static IEnumerable<Uri> ProcessPage(int page)
         {
-            Console.WriteLine("Processing page {0}", page);
+            ProgramLogger.LogInformation("Processing page {0}", page);
             var pageUri = new Uri(string.Format(Uri, page));
             string html = null;
             using (var client = new System.Net.WebClient())
@@ -108,7 +119,7 @@ namespace Standard.EBooks.Downloader
 
         private static IEnumerable<Uri> ProcessBook(Uri uri)
         {
-            Console.WriteLine("\tProcessing book {0}", uri.Segments.Last());
+            ProgramLogger.LogInformation("\tProcessing book {0}", uri.Segments.Last());
             string html = null;
             using (var client = new System.Net.WebClient())
             {
@@ -146,7 +157,7 @@ namespace Standard.EBooks.Downloader
                 return fullPath;
             }
 
-            Console.WriteLine("\tDownloading book {0}", fileName);
+            ProgramLogger.LogInformation("\tDownloading book {0}", fileName);
             using (var client = new System.Net.WebClient())
             {
                 client.DownloadFile(uri, fullPath);
