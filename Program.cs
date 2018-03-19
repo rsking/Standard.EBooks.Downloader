@@ -9,6 +9,8 @@ namespace Standard.EBooks.Downloader
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Reactive;
+    using System.Reactive.Linq;
     using System.Text;
     using System.Threading.Tasks;
     using Microsoft.Extensions.Logging;
@@ -34,7 +36,8 @@ namespace Standard.EBooks.Downloader
         /// The main entry point.
         /// </summary>
         /// <param name="args">The command line arguments.</param>
-        private static void Main(string[] args)
+        /// <returns>The main application task.</returns>
+        private static async Task Main(string[] args)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
 
@@ -44,12 +47,12 @@ namespace Standard.EBooks.Downloader
                 while (true)
                 {
                     var any = false;
-                    foreach (var value in ProcessPage(page))
+                    foreach (var value in ProcessPage(page).ToEnumerable())
                     {
                         foreach (var epub in ProcessBook(value))
                         {
                             // download this
-                            var epubInfo = EpubInfo.Parse(DownloadEpub(epub, ".\\"));
+                            var epubInfo = EpubInfo.Parse(await DownloadEpub(epub, ".\\"));
 
                             if (calibreLibrary.UpdateIfExists(epubInfo))
                             {
@@ -71,50 +74,48 @@ namespace Standard.EBooks.Downloader
             }
         }
 
-        private static IEnumerable<Uri> ProcessPage(int page)
+        private static IObservable<Uri> ProcessPage(int page)
         {
-            ProgramLogger.LogInformation("Processing page {0}", page);
-            var pageUri = new Uri(string.Format(Uri, page));
-            string html = null;
-            using (var client = new System.Net.WebClient())
+            return System.Reactive.Linq.Observable.Create<Uri>(async obs =>
             {
-                html = client.DownloadString(pageUri);
-            }
+                ProgramLogger.LogInformation("Processing page {0}", page);
+                var pageUri = new Uri(string.Format(Uri, page));
 
-            var document = new HtmlAgilityPack.HtmlDocument();
-            document.LoadHtml(html);
+                var document = new HtmlAgilityPack.HtmlDocument();
+                document.LoadHtml(await pageUri.DownloadAsStringAsync());
 
-            if (document.ParseErrors?.Any() == true)
-            {
-                // Handle any parse errors as required
-            }
-
-            if (document.DocumentNode != null)
-            {
-                // find all the links to the books
-                var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebooks']/ol/li/a");
-                if (nodes == null)
+                if (document.ParseErrors?.Any() == true)
                 {
-                    yield break;
+                    // Handle any parse errors as required
                 }
 
-                int count = -1;
-                try
+                if (document.DocumentNode != null)
                 {
-                    count = nodes.Count;
-                }
-                catch (NullReferenceException)
-                {
-                    yield break;
-                }
+                    // find all the links to the books
+                    var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebooks']/ol/li/a");
+                    if (nodes == null)
+                    {
+                        return;
+                    }
 
-                for (int i = 0; i < nodes.Count; i++)
-                {
-                    // get the html attribute
-                    var link = nodes[i].GetAttributeValue("href", string.Empty);
-                    yield return new Uri(pageUri, link);
+                    int count = -1;
+                    try
+                    {
+                        count = nodes.Count;
+                    }
+                    catch (NullReferenceException)
+                    {
+                        return;
+                    }
+
+                    for (int i = 0; i < nodes.Count; i++)
+                    {
+                        // get the html attribute
+                        var link = nodes[i].GetAttributeValue("href", string.Empty);
+                        obs.OnNext(new Uri(pageUri, link));
+                    }
                 }
-            }
+            });
         }
 
         private static IEnumerable<Uri> ProcessBook(Uri uri)
@@ -145,7 +146,7 @@ namespace Standard.EBooks.Downloader
             }
         }
 
-        private static string DownloadEpub(Uri uri, string path)
+        private static async Task<string> DownloadEpub(Uri uri, string path)
         {
             // create the file name
             var fileName = uri.Segments.Last();
@@ -158,11 +159,7 @@ namespace Standard.EBooks.Downloader
             }
 
             ProgramLogger.LogInformation("\tDownloading book {0}", fileName);
-            using (var client = new System.Net.WebClient())
-            {
-                client.DownloadFile(uri, fullPath);
-            }
-
+            await uri.DownloadAsFileAsync(fileName, false);
             return fullPath;
         }
     }
