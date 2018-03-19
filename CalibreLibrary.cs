@@ -139,6 +139,12 @@ namespace Standard.EBooks.Downloader
             var sourceFileInfo = new System.IO.FileInfo(source);
             var destinationFileInfo = new System.IO.FileInfo(destination);
 
+            if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
+            {
+                logger.LogInformation("\tsource and destination have different modified dates");
+                return false;
+            }
+
             if (sourceFileInfo.Length != destinationFileInfo.Length)
             {
                 logger.LogInformation("\tsource and destination are different lengths");
