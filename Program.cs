@@ -56,7 +56,7 @@ namespace Standard.EBooks.Downloader
 
                             if (calibreLibrary.UpdateIfExists(epubInfo))
                             {
-                                ProgramLogger.LogInformation("\tDeleting, {0} - {1}", epubInfo.Title, string.Join("; ", epubInfo.Authors));
+                                ProgramLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
                                 System.IO.File.Delete(epubInfo.Path);
                             }
                         }
