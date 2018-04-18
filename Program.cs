@@ -40,8 +40,10 @@ namespace Standard.EBooks.Downloader
         private static async Task Main(string[] args)
         {
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
+            var calibreLibraryPath = System.Environment.ExpandEnvironmentVariables(args[0]);
+            var outputPath = args.Length > 1 ? System.Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
 
-            using (var calibreLibrary = new CalibreLibrary(args[0], LoggerFactory.CreateLogger<CalibreLibrary>()))
+            using (var calibreLibrary = new CalibreLibrary(calibreLibraryPath, LoggerFactory.CreateLogger<CalibreLibrary>()))
             {
                 var page = 1;
                 while (true)
@@ -52,7 +54,7 @@ namespace Standard.EBooks.Downloader
                         foreach (var epub in ProcessBook(value))
                         {
                             // download this
-                            var epubInfo = EpubInfo.Parse(await DownloadEpub(epub, ".\\"));
+                            var epubInfo = EpubInfo.Parse(await DownloadEpub(epub, outputPath));
 
                             if (calibreLibrary.UpdateIfExists(epubInfo))
                             {
