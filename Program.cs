@@ -153,13 +153,13 @@ namespace Standard.EBooks.Downloader
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
 
             // get the last part of the URI
-            if (System.IO.File.Exists(fileName))
+            if (System.IO.File.Exists(fullPath))
             {
                 return fullPath;
             }
 
             ProgramLogger.LogInformation("\tDownloading book {0}", fileName);
-            await uri.DownloadAsFileAsync(fileName, false);
+            await uri.DownloadAsFileAsync(fullPath, false);
             return fullPath;
         }
     }
