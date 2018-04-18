@@ -83,7 +83,7 @@ namespace Standard.EBooks.Downloader
                     if (!CheckFiles(info.Path, fullPath, this.logger))
                     {
                         // files are not the same. Copy in the new file
-                        this.logger.LogInformation("\tReplacing {0} as files do not match");
+                        this.logger.LogInformation("\tReplacing {0} as files do not match", name);
                         System.IO.File.Copy(info.Path, fullPath, true);
                     }
 
