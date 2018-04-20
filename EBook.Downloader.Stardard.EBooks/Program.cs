@@ -55,7 +55,7 @@ namespace EBook.Downloader.Standard.EBooks
                         foreach (var epub in ProcessBook(value))
                         {
                             // download this
-                            var epubInfo = EpubInfo.Parse(await DownloadEpub(epub, outputPath));
+                            var epubInfo = EpubInfo.Parse(await DownloadBook(epub, outputPath));
 
                             if (calibreLibrary.UpdateIfExists(epubInfo))
                             {
@@ -146,13 +146,27 @@ namespace EBook.Downloader.Standard.EBooks
                     var link = node.GetAttributeValue("href", string.Empty);
                     yield return new Uri(uri, link);
                 }
+
+                nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']");
+                foreach (var node in nodes)
+                {
+                    var link = node.GetAttributeValue("href", string.Empty);
+                    yield return new Uri(uri, link);
+                }
             }
         }
 
-        private static async Task<string> DownloadEpub(Uri uri, string path)
+        private static async Task<string> DownloadBook(Uri uri, string path)
         {
             // create the file name
             var fileName = uri.Segments.Last();
+
+            // check to see if this is a kepub
+            if (fileName.EndsWith(".kepub.epub"))
+            {
+                fileName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            }
+
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
 
             // get the last part of the URI
