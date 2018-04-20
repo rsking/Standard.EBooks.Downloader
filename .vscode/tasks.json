@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/Standard.EBooks.Downloader.csproj"
+                "${workspaceFolder}/EBooks.Downloader.sln"
             ],
             "problemMatcher": "$msCompile"
         }

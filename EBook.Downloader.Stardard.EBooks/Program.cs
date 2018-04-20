@@ -4,7 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace Standard.EBooks.Downloader
+namespace EBook.Downloader.Standard.EBooks
 {
     using System;
     using System.Collections.Generic;
@@ -13,6 +13,7 @@ namespace Standard.EBooks.Downloader
     using System.Reactive.Linq;
     using System.Text;
     using System.Threading.Tasks;
+    using EBook.Downloader.Common;
     using Microsoft.Extensions.Logging;
 
     /// <summary>

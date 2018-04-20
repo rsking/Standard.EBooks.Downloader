@@ -4,7 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace Standard.EBooks.Downloader
+namespace EBook.Downloader.Common
 {
     using System;
     using System.Collections.Generic;

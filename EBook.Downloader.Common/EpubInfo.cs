@@ -4,7 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace Standard.EBooks.Downloader
+namespace EBook.Downloader.Common
 {
     /// <summary>
     /// EPUB information.

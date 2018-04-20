@@ -4,7 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace Standard.EBooks.Downloader
+namespace EBook.Downloader.Common
 {
     using System.IO;
     using System.Net.Http;
@@ -13,7 +13,7 @@ namespace Standard.EBooks.Downloader
     /// <summary>
     /// Extension methods.
     /// </summary>
-    internal static class ExtensionMethods
+    public static class ExtensionMethods
     {
         /// <summary>
         /// Downloads ther specified <see cref="System.Uri" /> as a file.
@@ -30,7 +30,7 @@ namespace Standard.EBooks.Downloader
                     {
                         var response = requestTask.Result;
                         response.EnsureSuccessStatusCode();
-                        return response.Content.ReadAsFileAsync(fileName, false);
+                        return response.Content.ReadAsFileAsync(fileName, overwrite);
                     }).Unwrap();
             }
         }
@@ -58,7 +58,7 @@ namespace Standard.EBooks.Downloader
             string pathName = Path.GetFullPath(fileName);
             if (!overwrite && File.Exists(fileName))
             {
-                throw new System.InvalidOperationException(string.Format("File {0} already exists.", pathName));
+                throw new System.InvalidOperationException($"File {pathName} already exists.");
             }
 
             FileStream fileStream = null;
