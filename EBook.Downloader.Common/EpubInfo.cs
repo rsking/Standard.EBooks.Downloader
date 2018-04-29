@@ -11,25 +11,44 @@ namespace EBook.Downloader.Common
     /// </summary>
     public struct EpubInfo
     {
+        private EpubInfo(
+            System.Collections.Generic.IEnumerable<string> authors,
+            string title,
+            string publisher,
+            string extension,
+            string path)
+        {
+            this.Authors = authors;
+            this.Title = title;
+            this.Publisher = publisher;
+            this.Extension = extension;
+            this.Path = path;
+        }
+
         /// <summary>
         /// Gets the authors
         /// </summary>
-        public System.Collections.Generic.IEnumerable<string> Authors { get; private set; }
+        public System.Collections.Generic.IEnumerable<string> Authors { get; }
 
         /// <summary>
         /// Gets the title
         /// </summary>
-        public string Title { get; private set; }
+        public string Title { get; }
+
+        /// <summary>
+        /// Gets the publisher.
+        /// </summary>
+        public string Publisher { get; }
 
         /// <summary>
         /// Gets the path
         /// </summary>
-        public string Path { get; private set; }
+        public string Path { get; }
 
         /// <summary>
         /// Gets the extension
         /// </summary>
-        public string Extension { get; private set; }
+        public string Extension { get; }
 
         /// <summary>
         /// Parses EPUB information from a path.
@@ -61,6 +80,7 @@ namespace EBook.Downloader.Common
             manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
 
             var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
+            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager).InnerText;
             var authors = new System.Collections.Generic.List<string>();
             var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
             if (author != null)
@@ -77,7 +97,7 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            return new EpubInfo { Title = title, Authors = authors.ToArray(), Path = path, Extension = System.IO.Path.GetExtension(path).TrimStart('.') };
+            return new EpubInfo(authors.ToArray(), title, publisher, System.IO.Path.GetExtension(path).TrimStart('.'), path);
         }
     }
 }

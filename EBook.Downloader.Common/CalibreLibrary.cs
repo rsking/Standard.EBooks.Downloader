@@ -97,7 +97,7 @@ namespace EBook.Downloader.Common
             this.selectCommand.Parameters[":extension"].Value = info.Extension.ToUpperInvariant();
             this.selectCommand.Parameters[":author"].Value = info.Authors.First().Replace(',', '|');
             this.selectCommand.Parameters[":title"].Value = info.Title;
-            this.selectCommand.Parameters[":publisher"].Value = "Standard EBooks";
+            this.selectCommand.Parameters[":publisher"].Value = info.Publisher;
 
             using (var reader = await this.selectCommand.ExecuteReaderAsync())
             {
