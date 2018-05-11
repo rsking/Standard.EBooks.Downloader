@@ -18,9 +18,19 @@ namespace EBook.Downloader.Common
     /// </summary>
     public class CalibreLibrary : IDisposable
     {
+        private const string TriggerName = "books_update_trg";
+
         private readonly ILogger logger;
 
         private Microsoft.Data.Sqlite.SqliteConnection connection;
+
+        private Microsoft.Data.Sqlite.SqliteCommand selectCommand;
+
+        private Microsoft.Data.Sqlite.SqliteCommand updateCommand;
+
+        private Microsoft.Data.Sqlite.SqliteCommand dropTriggerCommand;
+
+        private Microsoft.Data.Sqlite.SqliteCommand createTriggerCommand;
 
         private bool disposedValue = false; // To detect redundant calls
 
@@ -37,6 +47,35 @@ namespace EBook.Downloader.Common
             var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db") };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
             this.connection.Open();
+
+            this.selectCommand = this.connection.CreateCommand();
+            this.selectCommand.CommandText = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE d.format = :extension AND a.name = :author AND b.title = :title AND p.name = :publisher";
+            this.selectCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectCommand.Parameters.Add(":author", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectCommand.Parameters.Add(":title", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectCommand.Parameters.Add(":publisher", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectCommand.Prepare();
+
+            this.updateCommand = this.connection.CreateCommand();
+            this.updateCommand.CommandText = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
+            this.updateCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.updateCommand.Parameters.AddWithValue(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+
+            string createTriggerCommandText = default;
+            using (var command = this.connection.CreateCommand())
+            {
+                command.CommandText = $"SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = '{TriggerName}'";
+                createTriggerCommandText = command.ExecuteScalar() as string;
+            }
+
+            if (!string.IsNullOrEmpty(createTriggerCommandText))
+            {
+                this.dropTriggerCommand = this.connection.CreateCommand();
+                this.dropTriggerCommand.CommandText = $"DROP TRIGGER IF EXISTS {TriggerName}";
+                this.createTriggerCommand = this.connection.CreateCommand();
+                this.createTriggerCommand.CommandText = createTriggerCommandText;
+            }
         }
 
         /// <summary>
@@ -49,49 +88,78 @@ namespace EBook.Downloader.Common
         /// </summary>
         /// <param name="info">The EPUB info.</param>
         /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" /></returns>
-        public bool UpdateIfExists(EpubInfo info)
+        public async Task<bool> UpdateIfExistsAsync(EpubInfo info)
         {
-            using (var command = this.connection.CreateCommand())
+            int id = default;
+            string path = default;
+            string name = default;
+            string lastModified = default;
+            this.selectCommand.Parameters[":extension"].Value = info.Extension.ToUpperInvariant();
+            this.selectCommand.Parameters[":author"].Value = info.Authors.First().Replace(',', '|');
+            this.selectCommand.Parameters[":title"].Value = info.Title;
+            this.selectCommand.Parameters[":publisher"].Value = "Standard EBooks";
+
+            using (var reader = await this.selectCommand.ExecuteReaderAsync())
             {
-                command.CommandText = "SELECT b.path, d.name FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE d.format = :extension AND a.name = :author AND b.title = :title AND p.name = :publisher";
-                command.Parameters.AddWithValue(":extension", info.Extension.ToUpperInvariant());
-                command.Parameters.AddWithValue(":author", info.Authors.First().Replace(',', '|'));
-                command.Parameters.AddWithValue(":title", info.Title);
-                command.Parameters.AddWithValue(":publisher", "Standard EBooks");
-
-                string path = null;
-                string name = null;
-                using (var reader = command.ExecuteReader())
+                if (await reader.ReadAsync())
                 {
-                    if (reader.Read())
-                    {
-                        path = reader.GetString(0);
-                        name = reader.GetString(1);
-                    }
+                    id = reader.GetInt32(0);
+                    path = reader.GetString(1);
+                    name = reader.GetString(2);
+                    lastModified = reader.GetString(3);
                 }
+            }
 
-                if (path == null || name == null)
-                {
-                    return false;
-                }
-
-                var fullPath = System.IO.Path.Combine(this.Path, path, string.Format("{0}{1}", name, System.IO.Path.GetExtension(info.Path)));
-
-                if (System.IO.File.Exists(fullPath))
-                {
-                    // see if this has changed at all
-                    if (!CheckFiles(info.Path, fullPath, this.logger))
-                    {
-                        // files are not the same. Copy in the new file
-                        this.logger.LogInformation("\tReplacing {0} as files do not match", name);
-                        System.IO.File.Copy(info.Path, fullPath, true);
-                    }
-
-                    return true;
-                }
-
+            if (id == 0 || path == null || name == null)
+            {
                 return false;
             }
+
+            var fullPath = System.IO.Path.Combine(this.Path, path, string.Format("{0}{1}", name, System.IO.Path.GetExtension(info.Path)));
+
+            if (System.IO.File.Exists(fullPath))
+            {
+                // see if this has changed at all
+                if (!CheckFiles(info.Path, fullPath, this.logger))
+                {
+                    // files are not the same. Copy in the new file
+                    this.logger.LogInformation("\tReplacing {0} as files do not match", name);
+                    System.IO.File.Copy(info.Path, fullPath, true);
+                }
+
+                // see if we need to update the last modified time
+                var sourceFileInfo = new System.IO.FileInfo(info.Path);
+                var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz");
+                if (sourceLastWriteTime != lastModified)
+                {
+                    // check this as date time, to be within the same minute, and is the latest date/time
+                    var lastModifiedDateTime = DateTime.Parse(lastModified);
+                    var difference = lastModifiedDateTime - sourceFileInfo.LastWriteTime;
+                    if (Math.Abs(difference.TotalMinutes) > 1D || difference.TotalMinutes > 0)
+                    {
+                        // write this to the database
+                        this.logger.LogInformation("\tUpdating last modified time for {0} in the database ", name);
+                        this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTime;
+                        this.updateCommand.Parameters[":id"].Value = id;
+
+                        if (this.dropTriggerCommand != null)
+                        {
+                            await this.dropTriggerCommand.ExecuteNonQueryAsync();
+                        }
+
+                        await this.updateCommand.ExecuteNonQueryAsync();
+
+                        if (this.createTriggerCommand != null)
+                        {
+                            await this.createTriggerCommand.ExecuteNonQueryAsync();
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>

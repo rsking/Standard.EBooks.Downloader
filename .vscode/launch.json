@@ -10,7 +10,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/EBook.Downloader.Stardard.Ebooks/bin/Debug/netcoreapp2.0/EBook.Downloader.Standard.EBooks.dll",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.Ebooks/bin/Debug/netcoreapp2.0/EBook.Downloader.Standard.EBooks.dll",
             "args": [
                 "%USERPROFILE%\\OneDrive\\Calibre Library",
                 "%USERPROFILE%\\Downloads\\books"
