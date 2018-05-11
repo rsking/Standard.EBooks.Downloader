@@ -138,7 +138,7 @@ namespace EBook.Downloader.Common
                     if (Math.Abs(difference.TotalMinutes) > 1D || difference.TotalMinutes > 0)
                     {
                         // write this to the database
-                        this.logger.LogInformation("\tUpdating last modified time for {0} in the database ", name);
+                        this.logger.LogInformation("\tUpdating last modified time for {0} in the database to {1}", name, sourceLastWriteTime);
                         this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTime;
                         this.updateCommand.Parameters[":id"].Value = id;
 
