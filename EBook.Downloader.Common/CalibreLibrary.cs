@@ -134,7 +134,7 @@ namespace EBook.Downloader.Common
                 {
                     // check this as date time, to be within the same minute, and is the latest date/time
                     var lastModifiedDateTime = DateTime.Parse(lastModified);
-                    var difference = lastModifiedDateTime - sourceFileInfo.LastWriteTime;
+                    var difference = sourceFileInfo.LastWriteTime - lastModifiedDateTime;
                     if (Math.Abs(difference.TotalMinutes) > 1D || difference.TotalMinutes > 0)
                     {
                         // write this to the database
