@@ -7,6 +7,7 @@
 namespace EBook.Downloader.Common
 {
     using System.IO;
+    using System.Linq;
     using System.Net.Http;
     using System.Threading.Tasks;
 
@@ -16,7 +17,36 @@ namespace EBook.Downloader.Common
     public static class ExtensionMethods
     {
         /// <summary>
-        /// Downloads ther specified <see cref="System.Uri" /> as a file.
+        /// Checks to see whether the specified specified <see cref="System.Uri" /> needs to be downloaded based on the last modified date.
+        /// </summary>
+        /// <param name="uri">The uri to check.</param>
+        /// <param name="dateTime">The last modified date time.</param>
+        /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/></returns>
+        public static async Task<bool> ShouldDownload(this System.Uri uri, System.DateTime dateTime)
+        {
+            System.DateTimeOffset? lastModified = null;
+
+            using (var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }))
+            {
+                using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                    lastModified = response.Content.Headers.LastModified;
+                }
+            }
+
+            if (lastModified.HasValue)
+            {
+                // check down to a 2 second difference
+                var difference = dateTime.ToLocalTime() - lastModified.Value.DateTime;
+                return System.Math.Abs(difference.TotalSeconds) > 2D;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Downloads the specified <see cref="System.Uri" /> as a file.
         /// </summary>
         /// <param name="uri">The uri to download.</param>
         /// <param name="fileName">The file name to download to.</param>

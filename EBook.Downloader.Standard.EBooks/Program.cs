@@ -67,13 +67,27 @@ namespace EBook.Downloader.Standard.EBooks
                     {
                         foreach (var epub in ProcessBook(value))
                         {
-                            // download this
-                            var epubInfo = EpubInfo.Parse(await DownloadBook(epub, outputPath));
+                            // get the date time
+                            var dateTime = await calibreLibrary.GetDateTime(value, epub.GetExtension());
 
-                            if (await calibreLibrary.UpdateIfExistsAsync(epubInfo))
+                            if (dateTime.HasValue && !(await epub.ShouldDownload(dateTime.Value)))
                             {
-                                ProgramLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
-                                System.IO.File.Delete(epubInfo.Path);
+                                continue;
+                            }
+
+                            // download this
+                            var path = await DownloadBook(epub, outputPath);
+
+                            // parse the format this
+                            if (path != null)
+                            {
+                                var epubInfo = EpubInfo.Parse(path);
+
+                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo))
+                                {
+                                    ProgramLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
+                                    System.IO.File.Delete(epubInfo.Path);
+                                }
                             }
                         }
 
@@ -180,17 +194,7 @@ namespace EBook.Downloader.Standard.EBooks
         private static async Task<string> DownloadBook(Uri uri, string path)
         {
             // create the file name
-            var fileName = uri.Segments.Last();
-
-            // check to see if this is a kepub
-            if (fileName.EndsWith(".kepub.epub"))
-            {
-                fileName = System.IO.Path.GetFileNameWithoutExtension(fileName);
-            }
-            else if (fileName.EndsWith(".epub3"))
-            {
-                fileName = System.IO.Path.ChangeExtension(fileName, ".epub");
-            }
+            var fileName = uri.GetFileName();
 
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
 
