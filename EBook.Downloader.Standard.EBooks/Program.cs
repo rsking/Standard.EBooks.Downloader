@@ -40,13 +40,26 @@ namespace EBook.Downloader.Standard.EBooks
         /// <returns>The main application task.</returns>
         private static async Task Main(string[] args)
         {
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                if (e.ExceptionObject is System.Exception exception)
+                {
+                    ProgramLogger.LogError(exception, exception.Message);
+                }
+                else if (e.ExceptionObject != null)
+                {
+                    ProgramLogger.LogError(e.ExceptionObject.ToString());
+                }
+            };
+
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
             var calibreLibraryPath = System.Environment.ExpandEnvironmentVariables(args[0]);
             var outputPath = args.Length > 1 ? System.Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
+            var page = args.Length > 2 ? int.Parse(args[2]) : 1;
+            var endPage = args.Length > 3 ? int.Parse(args[3]) : int.MaxValue;
 
             using (var calibreLibrary = new CalibreLibrary(calibreLibraryPath, LoggerFactory.CreateLogger<CalibreLibrary>()))
             {
-                var page = 1;
                 while (true)
                 {
                     var any = false;
@@ -73,6 +86,10 @@ namespace EBook.Downloader.Standard.EBooks
                     }
 
                     page++;
+                    if (page >= endPage)
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -144,7 +161,11 @@ namespace EBook.Downloader.Standard.EBooks
                 foreach (var node in nodes)
                 {
                     var link = node.GetAttributeValue("href", string.Empty);
-                    yield return new Uri(uri, link);
+                    var bookUri = new Uri(uri, link);
+                    if (bookUri.Segments.Last().EndsWith("epub3"))
+                    {
+                        yield return bookUri;
+                    }
                 }
 
                 nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']");
@@ -165,6 +186,10 @@ namespace EBook.Downloader.Standard.EBooks
             if (fileName.EndsWith(".kepub.epub"))
             {
                 fileName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            }
+            else if (fileName.EndsWith(".epub3"))
+            {
+                fileName = System.IO.Path.ChangeExtension(fileName, ".epub");
             }
 
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
