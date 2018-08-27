@@ -378,10 +378,10 @@ namespace EBook.Downloader.Common
             var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz");
             if (sourceLastWriteTime != lastModified)
             {
-                // check this as date time, to be within the same minute, and is the latest date/time
+                // check this as date time, to be within the same five minutes, and is the latest date/time
                 var lastModifiedDateTime = DateTime.Parse(lastModified);
                 var difference = sourceFileInfo.LastWriteTime - lastModifiedDateTime;
-                if (Math.Abs(difference.TotalMinutes) > 1D || difference.TotalMinutes > 0)
+                if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
                 {
                     // write this to the database
                     this.logger.LogInformation("\tUpdating last modified time for {0} in the database to {1}", name, sourceLastWriteTime);
