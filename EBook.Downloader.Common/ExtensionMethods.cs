@@ -7,7 +7,6 @@
 namespace EBook.Downloader.Common
 {
     using System.IO;
-    using System.Linq;
     using System.Net.Http;
     using System.Threading.Tasks;
 
@@ -22,7 +21,7 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The uri to check.</param>
         /// <param name="dateTime">The last modified date time.</param>
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/></returns>
-        public static async Task<bool> ShouldDownload(this System.Uri uri, System.DateTime dateTime)
+        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime)
         {
             System.DateTimeOffset? lastModified = null;
 
@@ -30,7 +29,7 @@ namespace EBook.Downloader.Common
             {
                 using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
                 {
-                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                     lastModified = response.Content.Headers.LastModified;
                 }
             }
@@ -61,7 +60,7 @@ namespace EBook.Downloader.Common
                         var response = requestTask.Result;
                         response.EnsureSuccessStatusCode();
                         return response.Content.ReadAsFileAsync(fileName, overwrite);
-                    }).Unwrap();
+                    }).Unwrap().ConfigureAwait(false);
             }
         }
 
@@ -79,7 +78,7 @@ namespace EBook.Downloader.Common
                         var response = requestTask.Result;
                         response.EnsureSuccessStatusCode();
                         return response.Content.ReadAsStringAsync();
-                    }).Unwrap();
+                    }).Unwrap().ConfigureAwait(false);
             }
         }
 
@@ -102,18 +101,13 @@ namespace EBook.Downloader.Common
                     var dateTimeOffset = content.Headers.LastModified;
                     if (dateTimeOffset.HasValue)
                     {
-                        var fileSystemInfo = new FileInfo(pathName);
-                        fileSystemInfo.LastWriteTime = dateTimeOffset.Value.DateTime;
+                        var fileSystemInfo = new FileInfo(pathName) { LastWriteTime = dateTimeOffset.Value.DateTime };
                     }
                 });
             }
             catch
             {
-                if (fileStream != null)
-                {
-                    fileStream.Close();
-                }
-
+                fileStream?.Close();
                 throw;
             }
         }

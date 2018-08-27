@@ -21,7 +21,7 @@ namespace EBook.Downloader.Standard.EBooks
     /// </summary>
     internal class Program
     {
-        private static readonly string Uri = "https://standardebooks.org/ebooks/?page={0}";
+        private const string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
         private static readonly ILoggerFactory LoggerFactory;
 
@@ -42,7 +42,7 @@ namespace EBook.Downloader.Standard.EBooks
         {
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
-                if (e.ExceptionObject is System.Exception exception)
+                if (e.ExceptionObject is Exception exception)
                 {
                     ProgramLogger.LogError(exception, exception.Message);
                 }
@@ -53,14 +53,14 @@ namespace EBook.Downloader.Standard.EBooks
             };
 
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
-            var calibreLibraryPath = System.Environment.ExpandEnvironmentVariables(args[0]);
-            var outputPath = args.Length > 1 ? System.Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
+            var calibreLibraryPath = Environment.ExpandEnvironmentVariables(args[0]);
+            var outputPath = args.Length > 1 ? Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
             var page = args.Length > 2 ? int.Parse(args[2]) : 1;
             var endPage = args.Length > 3 ? int.Parse(args[3]) : int.MaxValue;
 
             using (var calibreLibrary = new CalibreLibrary(calibreLibraryPath, LoggerFactory.CreateLogger<CalibreLibrary>()))
             {
-                while (true)
+                do
                 {
                     var any = false;
                     foreach (var value in ProcessPage(page).ToEnumerable())
@@ -68,22 +68,22 @@ namespace EBook.Downloader.Standard.EBooks
                         foreach (var epub in ProcessBook(value))
                         {
                             // get the date time
-                            var dateTime = await calibreLibrary.GetDateTime(value, epub.GetExtension());
+                            var dateTime = await calibreLibrary.GetDateTimeAsync(value, epub.GetExtension()).ConfigureAwait(false);
 
-                            if (dateTime.HasValue && !(await epub.ShouldDownload(dateTime.Value)))
+                            if (dateTime.HasValue && !(await epub.ShouldDownloadAsync(dateTime.Value).ConfigureAwait(false)))
                             {
                                 continue;
                             }
 
                             // download this
-                            var path = await DownloadBook(epub, outputPath);
+                            var path = await DownloadBookAsync(epub, outputPath).ConfigureAwait(false);
 
                             // parse the format this
                             if (path != null)
                             {
                                 var epubInfo = EpubInfo.Parse(path);
 
-                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo))
+                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo).ConfigureAwait(false))
                                 {
                                     ProgramLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
                                     System.IO.File.Delete(epubInfo.Path);
@@ -100,23 +100,20 @@ namespace EBook.Downloader.Standard.EBooks
                     }
 
                     page++;
-                    if (page >= endPage)
-                    {
-                        break;
-                    }
                 }
+                while (page < endPage);
             }
         }
 
         private static IObservable<Uri> ProcessPage(int page)
         {
-            return System.Reactive.Linq.Observable.Create<Uri>(async obs =>
+            return Observable.Create<Uri>(async obs =>
             {
                 ProgramLogger.LogInformation("Processing page {0}", page);
                 var pageUri = new Uri(string.Format(Uri, page));
 
                 var document = new HtmlAgilityPack.HtmlDocument();
-                document.LoadHtml(await pageUri.DownloadAsStringAsync());
+                document.LoadHtml(await pageUri.DownloadAsStringAsync().ConfigureAwait(false));
 
                 if (document.ParseErrors?.Any() == true)
                 {
@@ -191,7 +188,7 @@ namespace EBook.Downloader.Standard.EBooks
             }
         }
 
-        private static async Task<string> DownloadBook(Uri uri, string path)
+        private static async Task<string> DownloadBookAsync(Uri uri, string path)
         {
             // create the file name
             var fileName = uri.GetFileName();
@@ -205,7 +202,7 @@ namespace EBook.Downloader.Standard.EBooks
             }
 
             ProgramLogger.LogInformation("\tDownloading book {0}", fileName);
-            await uri.DownloadAsFileAsync(fullPath, false);
+            await uri.DownloadAsFileAsync(fullPath, false).ConfigureAwait(false);
             return fullPath;
         }
     }

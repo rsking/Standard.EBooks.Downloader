@@ -7,9 +7,7 @@
 namespace EBook.Downloader.Common
 {
     using System;
-    using System.Collections.Generic;
     using System.Linq;
-    using System.Text;
     using System.Threading.Tasks;
     using Microsoft.Extensions.Logging;
 
@@ -26,23 +24,23 @@ namespace EBook.Downloader.Common
 
         private readonly string calibreDbPath;
 
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoAndFormatCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByUrlCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand updateCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand dropTriggerCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand createTriggerCommand;
+
         private Microsoft.Data.Sqlite.SqliteConnection connection;
 
-        private Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoAndFormatCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand selectBookByIdCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand selectBookByUrlCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand updateCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand dropTriggerCommand;
-
-        private Microsoft.Data.Sqlite.SqliteCommand createTriggerCommand;
-
-        private bool disposedValue = false; // To detect redundant calls
+        private bool disposedValue; // To detect redundant calls
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CalibreLibrary" /> class.
@@ -54,7 +52,7 @@ namespace EBook.Downloader.Common
         {
             this.Path = path;
             this.logger = logger;
-            this.calibreDbPath = System.Environment.ExpandEnvironmentVariables(System.IO.Path.Combine(calibrePath, "calibredb.exe"));
+            this.calibreDbPath = Environment.ExpandEnvironmentVariables(System.IO.Path.Combine(calibrePath, "calibredb.exe"));
 
             var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db"), Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
@@ -112,14 +110,14 @@ namespace EBook.Downloader.Common
         /// <summary>
         /// Gets the path.
         /// </summary>
-        public string Path { get; private set; }
+        public string Path { get; }
 
         /// <summary>
         /// Gets the last-modified for a specified URL.
         /// </summary>
         /// <param name="uri">The URL identifier.</param>
         /// <returns>The last modified date time.</returns>
-        public async Task<DateTime?> GetDateTime(System.Uri uri)
+        public async Task<DateTime?> GetDateTimeAsync(Uri uri)
         {
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
@@ -128,9 +126,9 @@ namespace EBook.Downloader.Common
             string name = default;
             string lastModified = default;
 
-            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync())
+            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
-                if (await reader.ReadAsync())
+                if (await reader.ReadAsync().ConfigureAwait(false))
                 {
                     id = reader.GetInt32(0);
                     path = reader.GetString(1);
@@ -153,7 +151,7 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The URL identifier.</param>
         /// <param name="extension">The format to check.</param>
         /// <returns>The last modified date time.</returns>
-        public async Task<DateTime?> GetDateTime(System.Uri uri, string extension)
+        public async Task<DateTime?> GetDateTimeAsync(Uri uri, string extension)
         {
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
@@ -162,9 +160,9 @@ namespace EBook.Downloader.Common
             string name = default;
             string lastModified = default;
 
-            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync())
+            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
-                if (await reader.ReadAsync())
+                if (await reader.ReadAsync().ConfigureAwait(false))
                 {
                     id = reader.GetInt32(0);
                     path = reader.GetString(1);
@@ -183,7 +181,7 @@ namespace EBook.Downloader.Common
             if (System.IO.File.Exists(fullPath))
             {
                 var fileInfo = new System.IO.FileInfo(fullPath);
-                await this.UpdateLastModifiedAsync(id, name, fileInfo, lastModified);
+                await this.UpdateLastModifiedAsync(id, name, fileInfo, lastModified).ConfigureAwait(false);
                 return fileInfo.LastWriteTimeUtc;
             }
 
@@ -207,9 +205,9 @@ namespace EBook.Downloader.Common
             this.selectBookByInfoAndFormatCommand.Parameters[":publisher"].Value = info.Publisher;
             this.selectBookByInfoAndFormatCommand.Parameters[":extension"].Value = info.Extension.ToUpperInvariant();
 
-            using (var reader = await this.selectBookByInfoAndFormatCommand.ExecuteReaderAsync())
+            using (var reader = await this.selectBookByInfoAndFormatCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
-                if (await reader.ReadAsync())
+                if (await reader.ReadAsync().ConfigureAwait(false))
                 {
                     id = reader.GetInt32(0);
                     path = reader.GetString(1);
@@ -225,9 +223,9 @@ namespace EBook.Downloader.Common
                 this.selectBookByInfoCommand.Parameters[":title"].Value = info.Title;
                 this.selectBookByInfoCommand.Parameters[":publisher"].Value = info.Publisher;
 
-                using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync())
+                using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
                 {
-                    if (await reader.ReadAsync())
+                    if (await reader.ReadAsync().ConfigureAwait(false))
                     {
                         id = reader.GetInt32(0);
                         path = reader.GetString(1);
@@ -240,9 +238,9 @@ namespace EBook.Downloader.Common
                 {
                     // we need to add this
                     this.ExecuteCalibreDbToLogger("add", "--duplicates --languages eng \"" + info.Path + "\"");
-                    using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync())
+                    using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
                     {
-                        if (await reader.ReadAsync())
+                        if (await reader.ReadAsync().ConfigureAwait(false))
                         {
                             id = reader.GetInt32(0);
                             path = reader.GetString(1);
@@ -252,14 +250,14 @@ namespace EBook.Downloader.Common
                     }
 
                     this.UpdateLastWriteTime(path, name, info);
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified);
+                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
                 }
                 else
                 {
                     // add this format
                     this.ExecuteCalibreDbToLogger("add_format", "--dont-replace " + id + " \"" + info.Path + "\"");
                     this.UpdateLastWriteTime(path, name, info);
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified);
+                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
                 }
 
                 return true;
@@ -279,7 +277,7 @@ namespace EBook.Downloader.Common
                     }
 
                     // see if we need to update the last modified time
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified);
+                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
 
                     return true;
                 }
@@ -310,11 +308,7 @@ namespace EBook.Downloader.Common
             {
                 if (disposing)
                 {
-                    if (this.connection != null)
-                    {
-                        this.connection.Dispose();
-                    }
-
+                    this.connection?.Dispose();
                     this.connection = null;
                 }
 
@@ -396,14 +390,14 @@ namespace EBook.Downloader.Common
 
                     if (this.dropTriggerCommand != null)
                     {
-                        await this.dropTriggerCommand.ExecuteNonQueryAsync();
+                        await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                     }
 
-                    await this.updateCommand.ExecuteNonQueryAsync();
+                    await this.updateCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
 
                     if (this.createTriggerCommand != null)
                     {
-                        await this.createTriggerCommand.ExecuteNonQueryAsync();
+                        await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                     }
                 }
             }
@@ -417,23 +411,8 @@ namespace EBook.Downloader.Common
                 var fileSystemInfo = new System.IO.FileInfo(info.Path);
                 var dateTime = fileSystemInfo.LastWriteTime;
 
-                fileSystemInfo = new System.IO.FileInfo(fullPath);
-                fileSystemInfo.LastWriteTime = dateTime;
+                fileSystemInfo = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
             }
-        }
-
-        private string ExecuteCalibreDbToString(string command, string arguments = "")
-        {
-            string output = null;
-            this.ExecuteCalibreDb(command, arguments, (sender, args) =>
-            {
-                if (args?.Data != null)
-                {
-                    output += args.Data;
-                }
-            });
-
-            return output;
         }
 
         private void ExecuteCalibreDbToLogger(string command, string arguments = "")
@@ -478,7 +457,7 @@ namespace EBook.Downloader.Common
 
                 process.WaitForExit();
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 this.logger.LogError(0, ex, "Failed to run calibredb.exe");
             }
