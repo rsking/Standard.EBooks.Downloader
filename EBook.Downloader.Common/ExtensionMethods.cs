@@ -20,18 +20,24 @@ namespace EBook.Downloader.Common
         /// </summary>
         /// <param name="uri">The uri to check.</param>
         /// <param name="dateTime">The last modified date time.</param>
+        /// <param name="clientFactory">The client factory.</param>
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/></returns>
-        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime)
+        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory clientFactory = null)
         {
             System.DateTimeOffset? lastModified = null;
+            var client = clientFactory == null
+                ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
+                : clientFactory.CreateClient("header");
 
-            using (var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }))
+            using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
             {
-                using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
-                {
-                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                    lastModified = response.Content.Headers.LastModified;
-                }
+                var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                lastModified = response.Content.Headers.LastModified;
+            }
+
+            if (clientFactory == null)
+            {
+                client?.Dispose();
             }
 
             if (lastModified.HasValue)
@@ -50,17 +56,22 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The uri to download.</param>
         /// <param name="fileName">The file name to download to.</param>
         /// <param name="overwrite">Set to true to overwrite.</param>
+        /// <param name="clientFactory">The client factory.</param>
         /// <returns>The task to download the file.</returns>
-        public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite)
+        public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory clientFactory = null)
         {
-            using (var client = new HttpClient())
+            var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
+
+            await client.GetAsync(uri).ContinueWith(requestTask =>
+                {
+                    var response = requestTask.Result;
+                    response.EnsureSuccessStatusCode();
+                    return response.Content.ReadAsFileAsync(fileName, overwrite);
+                }).Unwrap().ConfigureAwait(false);
+
+            if (clientFactory == null)
             {
-                await client.GetAsync(uri).ContinueWith(requestTask =>
-                    {
-                        var response = requestTask.Result;
-                        response.EnsureSuccessStatusCode();
-                        return response.Content.ReadAsFileAsync(fileName, overwrite);
-                    }).Unwrap().ConfigureAwait(false);
+                client?.Dispose();
             }
         }
 
@@ -69,17 +80,24 @@ namespace EBook.Downloader.Common
         /// </summary>
         /// <param name="uri">The uri to download.</param>
         /// <returns>The task to download the string.</returns>
-        public static async Task<string> DownloadAsStringAsync(this System.Uri uri)
+        /// <param name="clientFactory">The client factory.</param>
+        public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory clientFactory = null)
         {
-            using (var client = new HttpClient())
+            var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
+
+            var stringValue = await client.GetAsync(uri).ContinueWith(requestTask =>
+                {
+                    var response = requestTask.Result;
+                    response.EnsureSuccessStatusCode();
+                    return response.Content.ReadAsStringAsync();
+                }).Unwrap().ConfigureAwait(false);
+
+            if (clientFactory == null)
             {
-                return await client.GetAsync(uri).ContinueWith(requestTask =>
-                    {
-                        var response = requestTask.Result;
-                        response.EnsureSuccessStatusCode();
-                        return response.Content.ReadAsStringAsync();
-                    }).Unwrap().ConfigureAwait(false);
+                client?.Dispose();
             }
+
+            return stringValue;
         }
 
         private static Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite)
@@ -95,7 +113,7 @@ namespace EBook.Downloader.Common
             {
                 fileStream = new FileStream(pathName, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                return content.CopyToAsync(fileStream).ContinueWith(copyTask =>
+                return content.CopyToAsync(fileStream).ContinueWith(_ =>
                 {
                     fileStream.Close();
                     var dateTimeOffset = content.Headers.LastModified;
