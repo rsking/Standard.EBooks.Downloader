@@ -32,6 +32,7 @@ namespace EBook.Downloader.Common
             using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
             {
                 var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
                 lastModified = response.Content.Headers.LastModified;
             }
 
@@ -62,12 +63,9 @@ namespace EBook.Downloader.Common
         {
             var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
 
-            await client.GetAsync(uri).ContinueWith(requestTask =>
-                {
-                    var response = requestTask.Result;
-                    response.EnsureSuccessStatusCode();
-                    return response.Content.ReadAsFileAsync(fileName, overwrite);
-                }).Unwrap().ConfigureAwait(false);
+            var response = await client.GetAsync(uri).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            await response.Content.ReadAsFileAsync(fileName, overwrite).ConfigureAwait(false);
 
             if (clientFactory == null)
             {
@@ -85,12 +83,9 @@ namespace EBook.Downloader.Common
         {
             var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
 
-            var stringValue = await client.GetAsync(uri).ContinueWith(requestTask =>
-                {
-                    var response = requestTask.Result;
-                    response.EnsureSuccessStatusCode();
-                    return response.Content.ReadAsStringAsync();
-                }).Unwrap().ConfigureAwait(false);
+            var response = await client.GetAsync(uri).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var stringValue = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
             if (clientFactory == null)
             {

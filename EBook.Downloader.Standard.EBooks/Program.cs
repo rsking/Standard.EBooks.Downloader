@@ -126,7 +126,7 @@ namespace EBook.Downloader.Standard.EBooks
                 if (document.DocumentNode != null)
                 {
                     // find all the links to the books
-                    var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebooks']/ol/li/a");
+                    var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
                     if (nodes == null)
                     {
                         return;
@@ -145,6 +145,11 @@ namespace EBook.Downloader.Standard.EBooks
                     for (int i = 0; i < nodes.Count; i++)
                     {
                         // get the html attribute
+                        if (nodes[i].ParentNode.HasClass("author"))
+                        {
+                            continue;
+                        }
+
                         var link = nodes[i].GetAttributeValue("href", string.Empty);
                         obs.OnNext(new Uri(pageUri, link));
                     }
