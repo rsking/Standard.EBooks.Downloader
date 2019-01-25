@@ -22,6 +22,8 @@ namespace EBook.Downloader.Standard.EBooks
     {
         private const string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
+        private static readonly string FilterName = typeof(System.Net.Http.HttpClient).FullName;
+
         /// <summary>
         /// The main entry point.
         /// </summary>
@@ -31,7 +33,7 @@ namespace EBook.Downloader.Standard.EBooks
         {
             IServiceCollection services = new ServiceCollection();
             services
-                .AddLogging(c => c.AddConsole())
+                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => !category.StartsWith(FilterName)))
                 .AddHttpClient(string.Empty)
                 .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
                 .Services
