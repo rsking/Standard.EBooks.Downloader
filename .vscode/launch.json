@@ -15,7 +15,7 @@
                 "%OneDriveConsumer%\\Ross's Library",
                 "%USERPROFILE%\\Downloads\\books"
             ],
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/EBook.Downloder.Standard.EBooks",
             // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
             "console": "internalConsole",
             "stopAtEntry": false,
