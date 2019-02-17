@@ -161,7 +161,7 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static IEnumerable<Uri> ProcessBook(Uri uri, ILogger logger)
         {
-            logger.LogInformation("\tProcessing book {0}", uri.Segments.Last());
+            logger.LogInformation("\tProcessing book {0}{1}", uri.Segments[2], uri.Segments[3]);
             string html = null;
             using (var client = new System.Net.WebClient())
             {
