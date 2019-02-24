@@ -33,7 +33,7 @@ namespace EBook.Downloader.Standard.EBooks
         {
             IServiceCollection services = new ServiceCollection();
             services
-                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => !category.StartsWith(FilterName)))
+                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => logLevel > LogLevel.Debug && !category.StartsWith(FilterName)))
                 .AddHttpClient(string.Empty)
                 .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
                 .Services
