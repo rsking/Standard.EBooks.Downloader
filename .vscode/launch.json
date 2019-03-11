@@ -10,12 +10,12 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/EBook.Downloader.Standard.Ebooks/bin/Debug/netcoreapp2.2/EBook.Downloader.Standard.EBooks.dll",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/netcoreapp2.2/EBook.Downloader.Standard.EBooks.dll",
             "args": [
                 "%OneDriveConsumer%\\Ross's Library",
                 "%USERPROFILE%\\Downloads\\books"
             ],
-            "cwd": "${workspaceFolder}/EBook.Downloader.Standard.Ebooks",
+            "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
             // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
             "console": "internalConsole",
             "stopAtEntry": false,
