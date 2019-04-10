@@ -12,7 +12,7 @@
             // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/netcoreapp2.2/EBook.Downloader.Standard.EBooks.dll",
             "args": [
-                "%OneDriveConsumer%\\Ross's Library",
+                "%OneDriveConsumer%\\Books",
                 "%USERPROFILE%\\Downloads\\books"
             ],
             "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
