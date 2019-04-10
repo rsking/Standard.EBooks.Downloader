@@ -269,6 +269,17 @@ namespace EBook.Downloader.Common
                     {
                         // files are not the same. Copy in the new file
                         this.logger.LogInformation("\tReplacing {0} as files do not match", name);
+
+                        // access the destination file first
+                        var bytes = new byte[ushort.MaxValue];
+                        using (var stream = System.IO.File.OpenRead(fullPath))
+                        {
+                            int length;
+                            while ((length = stream.Read(bytes, 0, bytes.Length)) == bytes.Length)
+                            {
+                            }
+                        }
+
                         System.IO.File.Copy(info.Path, fullPath, true);
                     }
 
