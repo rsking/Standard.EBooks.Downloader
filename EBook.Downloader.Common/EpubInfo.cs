@@ -26,12 +26,12 @@ namespace EBook.Downloader.Common
         }
 
         /// <summary>
-        /// Gets the authors
+        /// Gets the authors.
         /// </summary>
         public System.Collections.Generic.IEnumerable<string> Authors { get; }
 
         /// <summary>
-        /// Gets the title
+        /// Gets the title.
         /// </summary>
         public string Title { get; }
 
@@ -41,12 +41,12 @@ namespace EBook.Downloader.Common
         public string Publisher { get; }
 
         /// <summary>
-        /// Gets the path
+        /// Gets the path.
         /// </summary>
         public string Path { get; }
 
         /// <summary>
-        /// Gets the extension
+        /// Gets the extension.
         /// </summary>
         public string Extension { get; }
 

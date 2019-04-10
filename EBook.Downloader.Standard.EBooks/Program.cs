@@ -12,6 +12,7 @@ namespace EBook.Downloader.Standard.EBooks
     using System.Reactive.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
+    using Humanizer;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
 
@@ -33,7 +34,7 @@ namespace EBook.Downloader.Standard.EBooks
         {
             IServiceCollection services = new ServiceCollection();
             services
-                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => logLevel > LogLevel.Debug && !category.StartsWith(FilterName)))
+                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => logLevel > LogLevel.Debug && !category.StartsWith(FilterName, StringComparison.Ordinal)))
                 .AddHttpClient(string.Empty)
                 .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
                 .Services
@@ -59,8 +60,8 @@ namespace EBook.Downloader.Standard.EBooks
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
             var calibreLibraryPath = Environment.ExpandEnvironmentVariables(args[0]);
             var outputPath = args.Length > 1 ? Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
-            var page = args.Length > 2 ? int.Parse(args[2]) : 1;
-            var endPage = args.Length > 3 ? int.Parse(args[3]) : int.MaxValue;
+            var page = args.Length > 2 ? int.Parse(args[2], System.Globalization.CultureInfo.CurrentCulture) : 1;
+            var endPage = args.Length > 3 ? int.Parse(args[3], System.Globalization.CultureInfo.CurrentCulture) : int.MaxValue;
             var httpClientFactory = serviceProvider.GetService<System.Net.Http.IHttpClientFactory>();
 
             using (var calibreLibrary = new CalibreLibrary(calibreLibraryPath, loggerFactory.CreateLogger<CalibreLibrary>()))
@@ -110,58 +111,57 @@ namespace EBook.Downloader.Standard.EBooks
             }
         }
 
-        private static IObservable<Uri> ProcessPage(int page, ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
+        private static IObservable<Uri> ProcessPage(int page, ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory) => Observable.Create<Uri>(async obs =>
         {
-            return Observable.Create<Uri>(async obs =>
+            logger.LogInformation("Processing page {0}", page);
+            var pageUri = new Uri(string.Format(System.Globalization.CultureInfo.InvariantCulture, Uri, page));
+
+            var document = new HtmlAgilityPack.HtmlDocument();
+            document.LoadHtml(await pageUri.DownloadAsStringAsync(httpClientFactory).ConfigureAwait(false));
+
+            if (document.ParseErrors?.Any() == true)
             {
-                logger.LogInformation("Processing page {0}", page);
-                var pageUri = new Uri(string.Format(Uri, page));
+                // Handle any parse errors as required
+            }
 
-                var document = new HtmlAgilityPack.HtmlDocument();
-                document.LoadHtml(await pageUri.DownloadAsStringAsync(httpClientFactory).ConfigureAwait(false));
-
-                if (document.ParseErrors?.Any() == true)
+            if (document.DocumentNode != null)
+            {
+                // find all the links to the books
+                var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
+                if (nodes == null)
                 {
-                    // Handle any parse errors as required
+                    return;
                 }
 
-                if (document.DocumentNode != null)
+                var count = -1;
+                try
                 {
-                    // find all the links to the books
-                    var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
-                    if (nodes == null)
-                    {
-                        return;
-                    }
-
-                    int count = -1;
-                    try
-                    {
-                        count = nodes.Count;
-                    }
-                    catch (NullReferenceException)
-                    {
-                        return;
-                    }
-
-                    for (int i = 0; i < nodes.Count; i++)
-                    {
-                        // get the html attribute
-                        if (nodes[i].ParentNode.HasClass("author"))
-                        {
-                            continue;
-                        }
-
-                        var link = nodes[i].GetAttributeValue("href", string.Empty);
-                        obs.OnNext(new Uri(pageUri, link));
-                    }
+                    count = nodes.Count;
                 }
-            });
-        }
+                catch (NullReferenceException)
+                {
+                    return;
+                }
+
+                for (var i = 0; i < nodes.Count; i++)
+                {
+                    // get the html attribute
+                    if (nodes[i].ParentNode.HasClass("author"))
+                    {
+                        continue;
+                    }
+
+                    var link = nodes[i].GetAttributeValue("href", string.Empty);
+                    obs.OnNext(new Uri(pageUri, link));
+                }
+            }
+        });
 
         private static IEnumerable<Uri> ProcessBook(Uri uri, ILogger logger)
         {
-            logger.LogInformation("\tProcessing book {0}{1}", uri.Segments[2], uri.Segments[3]);
+            var name = uri.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
+            var title = uri.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
+            logger.LogInformation("\tProcessing book {0} - {1}", name, title);
             string html = null;
             using (var client = new System.Net.WebClient())
             {
@@ -183,7 +183,7 @@ namespace EBook.Downloader.Standard.EBooks
                 {
                     var link = node.GetAttributeValue("href", string.Empty);
                     var bookUri = new Uri(uri, link);
-                    if (bookUri.Segments.Last().EndsWith("epub3"))
+                    if (bookUri.Segments.Last().EndsWith("epub3", StringComparison.Ordinal))
                     {
                         yield return bookUri;
                     }

@@ -21,7 +21,7 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The uri to check.</param>
         /// <param name="dateTime">The last modified date time.</param>
         /// <param name="clientFactory">The client factory.</param>
-        /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/></returns>
+        /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
         public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory clientFactory = null)
         {
             System.DateTimeOffset? lastModified = null;
@@ -97,7 +97,7 @@ namespace EBook.Downloader.Common
 
         private static Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite)
         {
-            string pathName = Path.GetFullPath(fileName);
+            var pathName = Path.GetFullPath(fileName);
             if (!overwrite && File.Exists(fileName))
             {
                 throw new System.InvalidOperationException($"File {pathName} already exists.");

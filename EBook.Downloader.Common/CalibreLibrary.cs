@@ -43,7 +43,7 @@ namespace EBook.Downloader.Common
         private bool disposedValue; // To detect redundant calls
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="CalibreLibrary" /> class.
+        /// Initialises a new instance of the <see cref="CalibreLibrary" /> class.
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="logger">The logger.</param>
@@ -122,8 +122,6 @@ namespace EBook.Downloader.Common
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
             int id = default;
-            string path = default;
-            string name = default;
             string lastModified = default;
 
             using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
@@ -131,8 +129,6 @@ namespace EBook.Downloader.Common
                 if (await reader.ReadAsync().ConfigureAwait(false))
                 {
                     id = reader.GetInt32(0);
-                    path = reader.GetString(1);
-                    name = reader.GetString(2);
                     lastModified = reader.GetString(3);
                 }
             }
@@ -142,7 +138,7 @@ namespace EBook.Downloader.Common
                 return null;
             }
 
-            return DateTime.Parse(lastModified);
+            return DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>
@@ -176,7 +172,7 @@ namespace EBook.Downloader.Common
                 return null;
             }
 
-            var fullPath = System.IO.Path.Combine(this.Path, path, string.Format("{0}{1}", name, extension));
+            var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{extension}");
 
             if (System.IO.File.Exists(fullPath))
             {
@@ -192,7 +188,7 @@ namespace EBook.Downloader.Common
         /// Updates the EPUB if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
-        /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" /></returns>
+        /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" />.</returns>
         public async Task<bool> UpdateIfExistsAsync(EpubInfo info)
         {
             int id = default;
@@ -264,7 +260,7 @@ namespace EBook.Downloader.Common
             }
             else
             {
-                var fullPath = System.IO.Path.Combine(this.Path, path, string.Format("{0}{1}", name, System.IO.Path.GetExtension(info.Path)));
+                var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
 
                 if (System.IO.File.Exists(fullPath))
                 {
@@ -293,15 +289,13 @@ namespace EBook.Downloader.Common
         {
             // Do not change this code. Put cleanup code in Dispose(bool disposing) below.
             this.Dispose(true);
-
-            // TODO: uncomment the following line if the finalizer is overridden below.
-            //// GC.SuppressFinalize(this);
+            GC.SuppressFinalize(this);
         }
 
         /// <summary>
         /// Disposes the unmanaged resource, and optionally managed resources, for this instance.
         /// </summary>
-        /// <param name="disposing">Set to <see landword="true"/> to dispose managed resources</param>
+        /// <param name="disposing">Set to <see landword="true"/> to dispose managed resources.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (!this.disposedValue)
@@ -362,11 +356,11 @@ namespace EBook.Downloader.Common
 
         private static byte[] GetFileHash(string fileName)
         {
-            using (var md5 = System.Security.Cryptography.MD5.Create())
+            using (var sha = System.Security.Cryptography.SHA256.Create())
             {
                 using (var stream = System.IO.File.OpenRead(fileName))
                 {
-                    return md5.ComputeHash(stream);
+                    return sha.ComputeHash(stream);
                 }
             }
         }
@@ -375,11 +369,11 @@ namespace EBook.Downloader.Common
 
         private async Task UpdateLastModifiedAsync(int id, string name, System.IO.FileInfo sourceFileInfo, string lastModified)
         {
-            var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz");
+            var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
             if (sourceLastWriteTime != lastModified)
             {
                 // check this as date time, to be within the same five minutes, and is the latest date/time
-                var lastModifiedDateTime = DateTime.Parse(lastModified);
+                var lastModifiedDateTime = DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture);
                 var difference = sourceFileInfo.LastWriteTime - lastModifiedDateTime;
                 if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
                 {
@@ -405,26 +399,23 @@ namespace EBook.Downloader.Common
 
         private void UpdateLastWriteTime(string path, string name, EpubInfo info)
         {
-            var fullPath = System.IO.Path.Combine(this.Path, path, string.Format("{0}{1}", name, System.IO.Path.GetExtension(info.Path)));
+            var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
             if (System.IO.File.Exists(fullPath))
             {
                 var fileSystemInfo = new System.IO.FileInfo(info.Path);
                 var dateTime = fileSystemInfo.LastWriteTime;
 
-                fileSystemInfo = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
+                _ = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
             }
         }
 
-        private void ExecuteCalibreDbToLogger(string command, string arguments = "")
-        {
-            this.ExecuteCalibreDb(command, arguments, (sender, args) =>
-            {
-                if (args?.Data != null)
-                {
-                    this.logger.LogInformation(0, args.Data);
-                }
-            });
-        }
+        private void ExecuteCalibreDbToLogger(string command, string arguments = "") => this.ExecuteCalibreDb(command, arguments, (sender, args) =>
+                                                                                      {
+                                                                                          if (args?.Data != null)
+                                                                                          {
+                                                                                              this.logger.LogInformation(0, args.Data);
+                                                                                          }
+                                                                                      });
 
         private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler outputDataReceived)
         {
