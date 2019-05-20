@@ -89,7 +89,7 @@ namespace EBook.Downloader.Standard.EBooks
                             {
                                 var epubInfo = EpubInfo.Parse(path);
 
-                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo).ConfigureAwait(false))
+                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo, dateTime.HasValue).ConfigureAwait(false))
                                 {
                                     programLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
                                     System.IO.File.Delete(epubInfo.Path);

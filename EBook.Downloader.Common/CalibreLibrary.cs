@@ -188,8 +188,9 @@ namespace EBook.Downloader.Common
         /// Updates the EPUB if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
+        /// <param name="found">Set to <see langword="true"/> if the book was already found.</param>
         /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" />.</returns>
-        public async Task<bool> UpdateIfExistsAsync(EpubInfo info)
+        public async Task<bool> UpdateIfExistsAsync(EpubInfo info, bool found)
         {
             int id = default;
             string path = default;
@@ -232,6 +233,13 @@ namespace EBook.Downloader.Common
 
                 if (id == 0)
                 {
+                    if (found)
+                    {
+                        // this was previously found
+                        this.logger.LogError("Failed to find {Book} by {Author} by data, but found by URI, check data", info.Title, info.Authors.First().Replace(',', '|'));
+                        return false;
+                    }
+
                     // we need to add this
                     this.ExecuteCalibreDbToLogger("add", "--duplicates --languages eng \"" + info.Path + "\"");
                     using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
@@ -260,6 +268,13 @@ namespace EBook.Downloader.Common
             }
             else
             {
+                if (!found)
+                {
+                    // this was previously found
+                    this.logger.LogError("Fount {Book} by {Author} by data, but this was not found by URI, check data", info.Title, info.Authors.First().Replace(',', '|'));
+                    return false;
+                }
+
                 var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
 
                 if (System.IO.File.Exists(fullPath))
