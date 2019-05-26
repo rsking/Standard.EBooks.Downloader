@@ -31,11 +31,11 @@ namespace EBook.Downloader.Standard.EBooks
             var fileName = uri.Segments.Last();
 
             // check to see if this is a kepub
-            if (fileName.EndsWith(".kepub.epub"))
+            if (fileName.EndsWith(".kepub.epub", System.StringComparison.OrdinalIgnoreCase))
             {
                 return System.IO.Path.GetFileNameWithoutExtension(fileName);
             }
-            else if (fileName.EndsWith(".epub3"))
+            else if (fileName.EndsWith(".epub3", System.StringComparison.OrdinalIgnoreCase))
             {
                 return System.IO.Path.ChangeExtension(fileName, ".epub");
             }

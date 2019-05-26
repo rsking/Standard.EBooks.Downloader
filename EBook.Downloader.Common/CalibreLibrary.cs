@@ -38,7 +38,7 @@ namespace EBook.Downloader.Common
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand createTriggerCommand;
 
-        private Microsoft.Data.Sqlite.SqliteConnection connection;
+        private readonly Microsoft.Data.Sqlite.SqliteConnection connection;
 
         private bool disposedValue; // To detect redundant calls
 
@@ -329,18 +329,11 @@ namespace EBook.Downloader.Common
                 if (disposing)
                 {
                     this.connection?.Dispose();
-                    this.connection = null;
                 }
 
                 this.disposedValue = true;
             }
         }
-
-        //// TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-        //// ~CalibreLibrary() {
-        ////   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-        ////   Dispose(false);
-        //// }
 
         private static bool CheckFiles(string source, string destination, ILogger logger)
         {
@@ -436,48 +429,41 @@ namespace EBook.Downloader.Common
         }
 
         private void ExecuteCalibreDbToLogger(string command, string arguments = "") => this.ExecuteCalibreDb(command, arguments, (sender, args) =>
-                                                                                      {
-                                                                                          if (args?.Data != null)
-                                                                                          {
-                                                                                              this.logger.LogInformation(0, args.Data);
-                                                                                          }
-                                                                                      });
+        {
+            if (args?.Data != null)
+            {
+                this.logger.LogInformation(0, args.Data);
+            }
+        });
 
         private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler outputDataReceived)
         {
-            try
+            var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)
             {
-                var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
 
-                var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)
-                {
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                };
+            var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
 
-                var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
+            process.OutputDataReceived += outputDataReceived;
 
-                process.OutputDataReceived += outputDataReceived;
-
-                process.ErrorDataReceived += (sender, args) =>
-                {
-                    if (args?.Data != null)
-                    {
-                        this.logger.LogError(0, args.Data);
-                    }
-                };
-
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                process.WaitForExit();
-            }
-            catch (Exception ex)
+            process.ErrorDataReceived += (sender, args) =>
             {
-                this.logger.LogError(0, ex, "Failed to run calibredb.exe");
-            }
+                if (args?.Data != null)
+                {
+                    this.logger.LogError(0, args.Data);
+                }
+            };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            process.WaitForExit();
         }
     }
 }

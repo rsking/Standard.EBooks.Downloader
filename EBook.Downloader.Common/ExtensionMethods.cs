@@ -108,15 +108,19 @@ namespace EBook.Downloader.Common
             {
                 fileStream = new FileStream(pathName, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                return content.CopyToAsync(fileStream).ContinueWith(_ =>
-                {
-                    fileStream.Close();
-                    var dateTimeOffset = content.Headers.LastModified;
-                    if (dateTimeOffset.HasValue)
+                return content.CopyToAsync(fileStream).ContinueWith(
+                    _ =>
                     {
-                        var fileSystemInfo = new FileInfo(pathName) { LastWriteTime = dateTimeOffset.Value.DateTime };
-                    }
-                });
+                        fileStream.Close();
+                        var dateTimeOffset = content.Headers.LastModified;
+                        if (dateTimeOffset.HasValue)
+                        {
+                            var fileSystemInfo = new FileInfo(pathName) { LastWriteTime = dateTimeOffset.Value.DateTime };
+                        }
+                    },
+                    System.Threading.CancellationToken.None,
+                    System.Threading.Tasks.TaskContinuationOptions.None,
+                    TaskScheduler.Default);
             }
             catch
             {
