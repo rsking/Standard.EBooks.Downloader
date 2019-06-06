@@ -159,7 +159,7 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static IEnumerable<Uri> ProcessBook(Uri uri, ILogger logger)
         {
-            var name = uri.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
+            var name = uri.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase, ToName.Instance);
             var title = uri.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
             logger.LogInformation("\tProcessing book {0} - {1}", name, title);
             string html = null;
@@ -214,6 +214,30 @@ namespace EBook.Downloader.Standard.EBooks
             logger.LogInformation("\tDownloading book {0}", fileName);
             await uri.DownloadAsFileAsync(fullPath, false, httpClientFactory).ConfigureAwait(false);
             return fullPath;
+        }
+
+        private class ToName : Humanizer.IStringTransformer
+        {
+            public static readonly Humanizer.IStringTransformer Instance = new ToName();
+
+            public string Transform(string input)
+            {
+                var result = input;
+                var matches = System.Text.RegularExpressions.Regex.Matches(input, @"(\w|[^\u0000-\u007F])+'?\w*");
+                var offset = 0;
+                foreach (System.Text.RegularExpressions.Match word in matches)
+                {
+                    if (word.Length == 1)
+                    {
+                        result = AddPeriod(word, result, offset);
+                        offset += word.Length;
+                    }
+                }
+
+                return result;
+            }
+
+            private static string AddPeriod(System.Text.RegularExpressions.Match word, string source, int offset) => source.Substring(0, offset + word.Index + word.Length) + "." + source.Substring(offset + word.Index + word.Length);
         }
     }
 }
