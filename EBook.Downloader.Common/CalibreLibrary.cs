@@ -20,6 +20,16 @@ namespace EBook.Downloader.Common
 
         private const string TriggerName = "books_update_trg";
 
+        private const string SelectByInfo = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE a.name = :author AND b.title = :title AND p.name = :publisher";
+
+        private const string SelectByInfoAndFormat = SelectByInfo + " AND d.format = :extension";
+
+        private const string SelectById = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book WHERE b.id = :id AND d.format = :extension";
+
+        private const string SelectByUrl = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = 'url' AND i.val = :uri LIMIT 1";
+
+        private const string UpdateById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
+
         private readonly ILogger logger;
 
         private readonly string calibreDbPath;
@@ -59,14 +69,14 @@ namespace EBook.Downloader.Common
             this.connection.Open();
 
             this.selectBookByInfoCommand = this.connection.CreateCommand();
-            this.selectBookByInfoCommand.CommandText = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE a.name = :author AND b.title = :title AND p.name = :publisher";
+            this.selectBookByInfoCommand.CommandText = SelectByInfo;
             this.selectBookByInfoCommand.Parameters.Add(":author", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByInfoCommand.Parameters.Add(":title", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByInfoCommand.Parameters.Add(":publisher", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByInfoCommand.Prepare();
 
             this.selectBookByInfoAndFormatCommand = this.connection.CreateCommand();
-            this.selectBookByInfoAndFormatCommand.CommandText = this.selectBookByInfoCommand.CommandText + " AND d.format = :extension";
+            this.selectBookByInfoAndFormatCommand.CommandText = SelectByInfoAndFormat;
             foreach (Microsoft.Data.Sqlite.SqliteParameter parameter in this.selectBookByInfoCommand.Parameters)
             {
                 this.selectBookByInfoAndFormatCommand.Parameters.Add(parameter.ParameterName, parameter.SqliteType);
@@ -76,22 +86,22 @@ namespace EBook.Downloader.Common
             this.selectBookByInfoAndFormatCommand.Prepare();
 
             this.selectBookByIdCommand = this.connection.CreateCommand();
-            this.selectBookByIdCommand.CommandText = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book WHERE b.id = :id AND d.format = :extension";
+            this.selectBookByIdCommand.CommandText = SelectById;
             this.selectBookByIdCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
             this.selectBookByIdCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByIdCommand.Prepare();
 
             this.selectBookByUrlCommand = this.connection.CreateCommand();
-            this.selectBookByUrlCommand.CommandText = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = 'url' AND i.val = :uri LIMIT 1";
+            this.selectBookByUrlCommand.CommandText = SelectByUrl;
             this.selectBookByUrlCommand.Parameters.Add(":uri", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByUrlCommand.Prepare();
 
             this.updateCommand = this.connection.CreateCommand();
-            this.updateCommand.CommandText = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
+            this.updateCommand.CommandText = UpdateById;
             this.updateCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
             this.updateCommand.Parameters.AddWithValue(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
-            string createTriggerCommandText = default;
+            var createTriggerCommandText = default(string);
             using (var command = this.connection.CreateCommand())
             {
                 command.CommandText = $"SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = '{TriggerName}'";
@@ -103,7 +113,9 @@ namespace EBook.Downloader.Common
                 this.dropTriggerCommand = this.connection.CreateCommand();
                 this.dropTriggerCommand.CommandText = $"DROP TRIGGER IF EXISTS {TriggerName}";
                 this.createTriggerCommand = this.connection.CreateCommand();
+#pragma warning disable CA2100 // Review SQL queries for security vulnerabilities
                 this.createTriggerCommand.CommandText = createTriggerCommandText;
+#pragma warning restore CA2100 // Review SQL queries for security vulnerabilities
             }
         }
 
