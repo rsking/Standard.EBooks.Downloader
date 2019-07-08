@@ -133,24 +133,14 @@ namespace EBook.Downloader.Common
         {
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
-            int id = default;
-            string lastModified = default;
 
-            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
+            using var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false);
+            if (await reader.ReadAsync().ConfigureAwait(false))
             {
-                if (await reader.ReadAsync().ConfigureAwait(false))
-                {
-                    id = reader.GetInt32(0);
-                    lastModified = reader.GetString(3);
-                }
+                return DateTime.Parse(reader.GetString(3), System.Globalization.CultureInfo.InvariantCulture);
             }
 
-            if (id == default)
-            {
-                return null;
-            }
-
-            return DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture);
+            return null;
         }
 
         /// <summary>
@@ -163,33 +153,26 @@ namespace EBook.Downloader.Common
         {
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
-            int id = default;
-            string path = default;
-            string name = default;
-            string lastModified = default;
+            (int id, string path, string name, string lastModified) values = default;
 
             using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
                 if (await reader.ReadAsync().ConfigureAwait(false))
                 {
-                    id = reader.GetInt32(0);
-                    path = reader.GetString(1);
-                    name = reader.GetString(2);
-                    lastModified = reader.GetString(3);
+                    values = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+                }
+                else
+                {
+                    return null;
                 }
             }
 
-            if (id == default)
-            {
-                return null;
-            }
-
-            var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{extension}");
+            var fullPath = System.IO.Path.Combine(this.Path, values.path, $"{values.name}{extension}");
 
             if (System.IO.File.Exists(fullPath))
             {
                 var fileInfo = new System.IO.FileInfo(fullPath);
-                await this.UpdateLastModifiedAsync(id, name, fileInfo, lastModified).ConfigureAwait(false);
+                await this.UpdateLastModifiedAsync(values.id, values.name, fileInfo, values.lastModified).ConfigureAwait(false);
                 return fileInfo.LastWriteTimeUtc;
             }
 
@@ -295,7 +278,7 @@ namespace EBook.Downloader.Common
                     if (!CheckFiles(info.Path, fullPath, this.logger))
                     {
                         // files are not the same. Copy in the new file
-                        this.logger.LogInformation("\tReplacing {0} as files do not match", name);
+                        this.logger.LogInformation("Replacing {0} as files do not match", name);
 
                         // access the destination file first
                         var bytes = new byte[ushort.MaxValue];
@@ -340,6 +323,13 @@ namespace EBook.Downloader.Common
             {
                 if (disposing)
                 {
+                    this.selectBookByInfoCommand?.Dispose();
+                    this.selectBookByInfoAndFormatCommand?.Dispose();
+                    this.selectBookByIdCommand?.Dispose();
+                    this.selectBookByUrlCommand?.Dispose();
+                    this.updateCommand?.Dispose();
+                    this.dropTriggerCommand?.Dispose();
+                    this.createTriggerCommand?.Dispose();
                     this.connection?.Dispose();
                 }
 
@@ -354,13 +344,13 @@ namespace EBook.Downloader.Common
 
             if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
             {
-                logger.LogInformation("\tsource and destination have different modified dates");
+                logger.LogDebug("\tsource and destination have different modified dates");
                 return false;
             }
 
             if (sourceFileInfo.Length != destinationFileInfo.Length)
             {
-                logger.LogInformation("\tsource and destination are different lengths");
+                logger.LogDebug("source and destination are different lengths");
                 return false;
             }
 
@@ -369,7 +359,7 @@ namespace EBook.Downloader.Common
 
             if (sourceHash.Length != destinationHash.Length)
             {
-                logger.LogInformation("\tsource and destination hashes are different lengths");
+                logger.LogDebug("source and destination hashes are different lengths");
                 return false;
             }
 
@@ -377,7 +367,7 @@ namespace EBook.Downloader.Common
             {
                 if (sourceHash[i] != destinationHash[i])
                 {
-                    logger.LogInformation("\tsource and destination hashes do not match");
+                    logger.LogDebug("source and destination hashes do not match");
                     return false;
                 }
             }
@@ -387,13 +377,9 @@ namespace EBook.Downloader.Common
 
         private static byte[] GetFileHash(string fileName)
         {
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-            {
-                using (var stream = System.IO.File.OpenRead(fileName))
-                {
-                    return sha.ComputeHash(stream);
-                }
-            }
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var stream = System.IO.File.OpenRead(fileName);
+            return sha.ComputeHash(stream);
         }
 
         private Task UpdateLastModifiedAsync(int id, string name, string path, string lastModified) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path), lastModified);
@@ -401,29 +387,31 @@ namespace EBook.Downloader.Common
         private async Task UpdateLastModifiedAsync(int id, string name, System.IO.FileInfo sourceFileInfo, string lastModified)
         {
             var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
-            if (sourceLastWriteTime != lastModified)
+            if (sourceLastWriteTime == lastModified)
             {
-                // check this as date time, to be within the same five minutes, and is the latest date/time
-                var lastModifiedDateTime = DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture);
-                var difference = sourceFileInfo.LastWriteTime - lastModifiedDateTime;
-                if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
+                return;
+            }
+
+            // check this as date time, to be within the same five minutes, and is the latest date/time
+            var lastModifiedDateTime = DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture);
+            var difference = sourceFileInfo.LastWriteTime - lastModifiedDateTime;
+            if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
+            {
+                // write this to the database
+                this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModifiedDateTime.ToUniversalTime(), sourceFileInfo.LastWriteTimeUtc);
+                this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTime;
+                this.updateCommand.Parameters[":id"].Value = id;
+
+                if (this.dropTriggerCommand != null)
                 {
-                    // write this to the database
-                    this.logger.LogInformation("\tUpdating last modified time for {0} in the database to {1} from {2:yyyy-MM-dd HH:mm:ss.ffffffzzz}", name, sourceLastWriteTime, lastModifiedDateTime.ToUniversalTime());
-                    this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTime;
-                    this.updateCommand.Parameters[":id"].Value = id;
+                    await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
+                }
 
-                    if (this.dropTriggerCommand != null)
-                    {
-                        await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
-                    }
+                await this.updateCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
 
-                    await this.updateCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
-
-                    if (this.createTriggerCommand != null)
-                    {
-                        await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
-                    }
+                if (this.createTriggerCommand != null)
+                {
+                    await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                 }
             }
         }
