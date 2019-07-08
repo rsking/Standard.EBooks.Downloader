@@ -24,11 +24,11 @@ namespace EBook.Downloader.Common
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
         public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory clientFactory = null)
         {
-            System.DateTimeOffset? lastModified = null;
             var client = clientFactory == null
                 ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
                 : clientFactory.CreateClient("header");
 
+            System.DateTimeOffset? lastModified = null;
             using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
             {
                 var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
@@ -41,14 +41,9 @@ namespace EBook.Downloader.Common
                 client?.Dispose();
             }
 
-            if (lastModified.HasValue)
-            {
-                // check down to a 2 second difference
-                var difference = dateTime.ToLocalTime() - lastModified.Value.DateTime;
-                return System.Math.Abs(difference.TotalSeconds) > 2D;
-            }
-
-            return true;
+            return lastModified.HasValue
+                ? System.Math.Abs((dateTime.ToLocalTime() - lastModified.Value.DateTime).TotalSeconds) > 2D
+                : true;
         }
 
         /// <summary>
@@ -62,7 +57,6 @@ namespace EBook.Downloader.Common
         public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory clientFactory = null)
         {
             var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
-
             var response = await client.GetAsync(uri).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             await response.Content.ReadAsFileAsync(fileName, overwrite).ConfigureAwait(false);
@@ -82,10 +76,7 @@ namespace EBook.Downloader.Common
         public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory clientFactory = null)
         {
             var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
-
-            var response = await client.GetAsync(uri).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var stringValue = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var stringValue = await client.GetStringAsync(uri).ConfigureAwait(false);
 
             if (clientFactory == null)
             {
@@ -97,12 +88,12 @@ namespace EBook.Downloader.Common
 
         private static Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite)
         {
-            var pathName = Path.GetFullPath(fileName);
             if (!overwrite && File.Exists(fileName))
             {
-                throw new System.InvalidOperationException($"File {pathName} already exists.");
+                throw new System.InvalidOperationException($"\"{fileName}\" already exists.");
             }
 
+            var pathName = Path.GetFullPath(fileName);
             FileStream fileStream = null;
             try
             {
@@ -119,7 +110,7 @@ namespace EBook.Downloader.Common
                         }
                     },
                     System.Threading.CancellationToken.None,
-                    System.Threading.Tasks.TaskContinuationOptions.None,
+                    TaskContinuationOptions.None,
                     TaskScheduler.Default);
             }
             catch
