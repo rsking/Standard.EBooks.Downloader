@@ -9,17 +9,17 @@ namespace EBook.Downloader.Standard.EBooks
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Reactive.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
     using Humanizer;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
+    using Serilog;
 
     /// <summary>
     /// The main program class.
     /// </summary>
-    internal static class Program
+    internal class Program
     {
         private const string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
@@ -32,19 +32,20 @@ namespace EBook.Downloader.Standard.EBooks
         /// <returns>The main application task.</returns>
         private static async Task Main(string[] args)
         {
-            IServiceCollection services = new ServiceCollection();
-            services
-                .AddLogging(c => c.AddConsole().AddFilter((string category, LogLevel logLevel) => logLevel > LogLevel.Debug && !category.StartsWith(FilterName, StringComparison.Ordinal)))
-                .AddHttpClient(string.Empty)
-                .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
-                .Services
-                .AddHttpClient("header")
-                .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
+            var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((hostContext, services) =>
+            {
+                var serilogLogger = new LoggerConfiguration().WriteTo.ColoredConsole().Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
+                    || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
+                    && scalarValue.Value is string stringValue
+                    && stringValue.StartsWith(FilterName, StringComparison.Ordinal))).CreateLogger();
+                services.AddLogging(c => c.AddSerilog(serilogLogger, true));
+                services.AddHttpClient(string.Empty)
+                    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
+                services.AddHttpClient("header")
+                    .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
+            }).Build();
 
-            var serviceProvider = services.BuildServiceProvider();
-
-            var loggerFactory = serviceProvider.GetService<ILoggerFactory>();
-            var programLogger = loggerFactory.CreateLogger(nameof(Program));
+            var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 if (e.ExceptionObject is Exception exception)
@@ -62,58 +63,61 @@ namespace EBook.Downloader.Standard.EBooks
             var outputPath = args.Length > 1 ? Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
             var page = args.Length > 2 ? int.Parse(args[2], System.Globalization.CultureInfo.CurrentCulture) : 1;
             var endPage = args.Length > 3 ? int.Parse(args[3], System.Globalization.CultureInfo.CurrentCulture) : int.MaxValue;
-            var httpClientFactory = serviceProvider.GetService<System.Net.Http.IHttpClientFactory>();
+            var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
 
-            using (var calibreLibrary = new CalibreLibrary(calibreLibraryPath, loggerFactory.CreateLogger<CalibreLibrary>()))
+            using var calibreLibrary = new CalibreLibrary(calibreLibraryPath, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+            do
             {
-                do
+                var any = false;
+                programLogger.LogDebug("Processing page {Page}", page);
+                using var pageScope = programLogger.BeginScope(page);
+                await foreach (var value in ProcessPage(page, httpClientFactory))
                 {
-                    var any = false;
-                    foreach (var value in ProcessPage(page, programLogger, httpClientFactory).ToEnumerable())
+                    var name = value.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase, ToName.Instance);
+                    var title = value.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
+                    programLogger.LogInformation("Processing book {Name} - {Title}", name, title);
+                    using var bookScope = programLogger.BeginScope("{Name} - {Title}", name, title);
+                    foreach (var epub in ProcessBook(value, name, title))
                     {
-                        foreach (var epub in ProcessBook(value, programLogger))
+                        // get the date time
+                        var dateTime = await calibreLibrary.GetDateTimeAsync(value, epub.GetExtension()).ConfigureAwait(false);
+
+                        if (dateTime.HasValue && !(await epub.ShouldDownloadAsync(dateTime.Value, httpClientFactory).ConfigureAwait(false)))
                         {
-                            // get the date time
-                            var dateTime = await calibreLibrary.GetDateTimeAsync(value, epub.GetExtension()).ConfigureAwait(false);
-
-                            if (dateTime.HasValue && !(await epub.ShouldDownloadAsync(dateTime.Value, httpClientFactory).ConfigureAwait(false)))
-                            {
-                                continue;
-                            }
-
-                            // download this
-                            var path = await DownloadBookAsync(epub, outputPath, programLogger, httpClientFactory).ConfigureAwait(false);
-
-                            // parse the format this
-                            if (path != null)
-                            {
-                                var epubInfo = EpubInfo.Parse(path);
-
-                                if (await calibreLibrary.UpdateIfExistsAsync(epubInfo, dateTime.HasValue).ConfigureAwait(false))
-                                {
-                                    programLogger.LogInformation("\tDeleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
-                                    System.IO.File.Delete(epubInfo.Path);
-                                }
-                            }
+                            continue;
                         }
 
-                        any = true;
+                        // download this
+                        var path = await DownloadBookAsync(epub, outputPath, programLogger, httpClientFactory).ConfigureAwait(false);
+
+                        // parse the format this
+                        if (path != null)
+                        {
+                            var epubInfo = EpubInfo.Parse(path);
+
+                            if (await calibreLibrary.UpdateIfExistsAsync(epubInfo, dateTime.HasValue).ConfigureAwait(false))
+                            {
+                                programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
+                                System.IO.File.Delete(epubInfo.Path);
+                            }
+                        }
                     }
 
-                    if (!any)
-                    {
-                        break;
-                    }
-
-                    page++;
+                    any = true;
                 }
-                while (page < endPage);
+
+                if (!any)
+                {
+                    break;
+                }
+
+                page++;
             }
+            while (page < endPage);
         }
 
-        private static IObservable<Uri> ProcessPage(int page, ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory) => Observable.Create<Uri>(async obs =>
+        private static async IAsyncEnumerable<Uri> ProcessPage(int page, System.Net.Http.IHttpClientFactory httpClientFactory)
         {
-            logger.LogInformation("Processing page {0}", page);
             var pageUri = new Uri(string.Format(System.Globalization.CultureInfo.InvariantCulture, Uri, page));
 
             var document = new HtmlAgilityPack.HtmlDocument();
@@ -130,7 +134,7 @@ namespace EBook.Downloader.Standard.EBooks
                 var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
                 if (nodes == null)
                 {
-                    return;
+                    yield break;
                 }
 
                 var count = -1;
@@ -140,10 +144,10 @@ namespace EBook.Downloader.Standard.EBooks
                 }
                 catch (NullReferenceException)
                 {
-                    return;
+                    yield break;
                 }
 
-                for (var i = 0; i < nodes.Count; i++)
+                for (var i = 0; i < count; i++)
                 {
                     // get the html attribute
                     if (nodes[i].ParentNode.HasClass("author"))
@@ -152,16 +156,13 @@ namespace EBook.Downloader.Standard.EBooks
                     }
 
                     var link = nodes[i].GetAttributeValue("href", string.Empty);
-                    obs.OnNext(new Uri(pageUri, link));
+                    yield return new Uri(pageUri, link);
                 }
             }
-        });
+        }
 
-        private static IEnumerable<Uri> ProcessBook(Uri uri, ILogger logger)
+        private static IEnumerable<Uri> ProcessBook(Uri uri, string name, string title)
         {
-            var name = uri.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase, ToName.Instance);
-            var title = uri.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
-            logger.LogInformation("\tProcessing book {0} - {1}", name, title);
             string html = null;
             using (var client = new System.Net.WebClient())
             {
@@ -198,7 +199,7 @@ namespace EBook.Downloader.Standard.EBooks
             }
         }
 
-        private static async Task<string> DownloadBookAsync(Uri uri, string path, ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
+        private static async Task<string> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
         {
             // create the file name
             var fileName = uri.GetFileName();
