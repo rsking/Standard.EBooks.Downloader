@@ -10,7 +10,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/netcoreapp2.2/EBook.Downloader.Standard.EBooks.dll",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/netcoreapp3.0/EBook.Downloader.Standard.EBooks.dll",
             "args": [
                 "%OneDriveConsumer%\\Books",
                 "%USERPROFILE%\\Downloads\\books"
