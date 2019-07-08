@@ -11,21 +11,14 @@ namespace EBook.Downloader.Common
     /// <summary>
     /// EPUB information.
     /// </summary>
-    public struct EpubInfo : System.IEquatable<EpubInfo>
+    public readonly struct EpubInfo : System.IEquatable<EpubInfo>
     {
         private EpubInfo(
             System.Collections.Generic.IEnumerable<string> authors,
             string title,
             string publisher,
             string extension,
-            string path)
-        {
-            this.Authors = authors;
-            this.Title = title;
-            this.Publisher = publisher;
-            this.Extension = extension;
-            this.Path = path;
-        }
+            string path) => (this.Authors, this.Title, this.Publisher, this.Extension, this.Path) = (authors, title, publisher, extension, path);
 
         /// <summary>
         /// Gets the authors.
@@ -81,13 +74,10 @@ namespace EBook.Downloader.Common
             {
                 var content = zip.GetEntry("epub/content.opf");
 
-                using (var stream = content.Open())
-                {
-                    using (var reader = new System.IO.StreamReader(stream))
-                    {
-                        contents = reader.ReadToEnd();
-                    }
-                }
+                using var stream = content.Open();
+                using var reader = new System.IO.StreamReader(stream);
+
+                contents = reader.ReadToEnd();
             }
 
             var document = new System.Xml.XmlDocument();
