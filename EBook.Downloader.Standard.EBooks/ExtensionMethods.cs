@@ -25,22 +25,11 @@ namespace EBook.Downloader.Standard.EBooks
         /// </summary>
         /// <param name="uri">The URL.</param>
         /// <returns>The file name.</returns>
-        public static string GetFileName(this System.Uri uri)
+        public static string GetFileName(this System.Uri uri) => uri.Segments.Last() switch
         {
-            // create the file name
-            var fileName = uri.Segments.Last();
-
-            // check to see if this is a kepub
-            if (fileName.EndsWith(".kepub.epub", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return System.IO.Path.GetFileNameWithoutExtension(fileName);
-            }
-            else if (fileName.EndsWith(".epub3", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return System.IO.Path.ChangeExtension(fileName, ".epub");
-            }
-
-            return fileName;
-        }
+            string value when value.EndsWith(".kepub.epub", System.StringComparison.OrdinalIgnoreCase) => System.IO.Path.GetFileNameWithoutExtension(value),
+            string value when value.EndsWith(".epub3", System.StringComparison.OrdinalIgnoreCase) => System.IO.Path.ChangeExtension(value, ".epub"),
+            string value => value,
+        };
     }
 }
