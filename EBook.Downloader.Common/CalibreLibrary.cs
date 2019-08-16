@@ -131,6 +131,11 @@ namespace EBook.Downloader.Common
         /// <returns>The last modified date time.</returns>
         public async Task<DateTime?> GetDateTimeAsync(Uri uri)
         {
+            if (uri is null)
+            {
+                return null;
+            }
+
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
 
@@ -151,6 +156,11 @@ namespace EBook.Downloader.Common
         /// <returns>The last modified date time.</returns>
         public async Task<DateTime?> GetDateTimeAsync(Uri uri, string extension)
         {
+            if (uri is null)
+            {
+                return null;
+            }
+
             // get the date time of the format
             this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
             (int id, string path, string name, string lastModified) values = default;
@@ -386,8 +396,9 @@ namespace EBook.Downloader.Common
 
         private async Task UpdateLastModifiedAsync(int id, string name, System.IO.FileInfo sourceFileInfo, string lastModified)
         {
-            var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
-            if (sourceLastWriteTime == lastModified)
+            var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc;
+            var sourceLastWriteTimeFormat = sourceLastWriteTime.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
+            if (sourceLastWriteTimeFormat == lastModified)
             {
                 return;
             }
@@ -398,8 +409,8 @@ namespace EBook.Downloader.Common
             if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
             {
                 // write this to the database
-                this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModifiedDateTime.ToUniversalTime(), sourceFileInfo.LastWriteTimeUtc);
-                this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTime;
+                this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModifiedDateTime.ToUniversalTime(), sourceLastWriteTime);
+                this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTimeFormat;
                 this.updateCommand.Parameters[":id"].Value = id;
 
                 if (this.dropTriggerCommand != null)
@@ -447,7 +458,7 @@ namespace EBook.Downloader.Common
                 RedirectStandardError = true,
             };
 
-            var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
+            using var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
 
             process.OutputDataReceived += outputDataReceived;
 

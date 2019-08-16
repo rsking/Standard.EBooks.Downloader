@@ -24,25 +24,20 @@ namespace EBook.Downloader.Common
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
         public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory clientFactory = null)
         {
-            var client = clientFactory == null
+            using var client = clientFactory == null
                 ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
                 : clientFactory.CreateClient("header");
 
             System.DateTimeOffset? lastModified = null;
             using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
             {
-                var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
                 lastModified = response.Content.Headers.LastModified;
             }
 
-            if (clientFactory == null)
-            {
-                client?.Dispose();
-            }
-
             return lastModified.HasValue
-                ? System.Math.Abs((dateTime.ToLocalTime() - lastModified.Value.DateTime).TotalSeconds) > 2D
+                ? System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D
                 : true;
         }
 
@@ -56,15 +51,10 @@ namespace EBook.Downloader.Common
         /// <returns>The task to download the file.</returns>
         public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory clientFactory = null)
         {
-            var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
-            var response = await client.GetAsync(uri).ConfigureAwait(false);
+            using var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
+            using var response = await client.GetAsync(uri).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             await response.Content.ReadAsFileAsync(fileName, overwrite).ConfigureAwait(false);
-
-            if (clientFactory == null)
-            {
-                client?.Dispose();
-            }
         }
 
         /// <summary>
@@ -75,18 +65,11 @@ namespace EBook.Downloader.Common
         /// <param name="clientFactory">The client factory.</param>
         public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory clientFactory = null)
         {
-            var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
-            var stringValue = await client.GetStringAsync(uri).ConfigureAwait(false);
-
-            if (clientFactory == null)
-            {
-                client?.Dispose();
-            }
-
-            return stringValue;
+            using var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
+            return await client.GetStringAsync(uri).ConfigureAwait(false);
         }
 
-        private static Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite)
+        private static async Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite)
         {
             if (!overwrite && File.Exists(fileName))
             {
@@ -99,19 +82,21 @@ namespace EBook.Downloader.Common
             {
                 fileStream = new FileStream(pathName, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                return content.CopyToAsync(fileStream).ContinueWith(
+                await content.CopyToAsync(fileStream).ContinueWith(
                     _ =>
                     {
                         fileStream.Close();
                         var dateTimeOffset = content.Headers.LastModified;
                         if (dateTimeOffset.HasValue)
                         {
-                            var fileSystemInfo = new FileInfo(pathName) { LastWriteTime = dateTimeOffset.Value.DateTime };
+                            var fileSystemInfo = new FileInfo(pathName) { LastWriteTimeUtc = dateTimeOffset.Value.UtcDateTime };
                         }
                     },
                     System.Threading.CancellationToken.None,
                     TaskContinuationOptions.None,
-                    TaskScheduler.Default);
+                    TaskScheduler.Default).ConfigureAwait(false);
+
+                fileStream.Dispose();
             }
             catch
             {

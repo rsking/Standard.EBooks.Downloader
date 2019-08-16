@@ -8,6 +8,9 @@ namespace EBook.Downloader.Standard.EBooks
 {
     using System;
     using System.Collections.Generic;
+    using System.CommandLine;
+    using System.CommandLine.Builder;
+    using System.CommandLine.Invocation;
     using System.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
@@ -23,6 +26,8 @@ namespace EBook.Downloader.Standard.EBooks
     {
         private const string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
+        private static readonly string DefaultOutputPath = "." + System.IO.Path.DirectorySeparatorChar;
+
         private static readonly string FilterName = typeof(System.Net.Http.HttpClient).FullName;
 
         /// <summary>
@@ -30,9 +35,30 @@ namespace EBook.Downloader.Standard.EBooks
         /// </summary>
         /// <param name="args">The command line arguments.</param>
         /// <returns>The main application task.</returns>
-        private static async Task Main(string[] args)
+        private static Task Main(string[] args)
         {
-            var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((hostContext, services) =>
+            var rootCommand = new RootCommand("Standard EBook Downloder");
+            rootCommand.AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne });
+            rootCommand.AddOption(new Option(new[] { "--output-path", "-o" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } });
+            rootCommand.AddOption(new Option(new[] { "--start-page", "-s" }, "The start page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } });
+            rootCommand.AddOption(new Option(new[] { "--end-page", "-e" }, "The end page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } });
+
+            rootCommand.Handler = CommandHandler.Create<System.IO.DirectoryInfo, System.IO.DirectoryInfo, int, int>(Process);
+
+            if (args != null)
+            {
+                for (var i = 0; i < args.Length; i++)
+                {
+                    args[i] = Environment.ExpandEnvironmentVariables(args[i]);
+                }
+            }
+
+            return rootCommand.InvokeAsync(args);
+        }
+
+        private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int page = 1, int endPage = int.MaxValue)
+        {
+            var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((_, services) =>
             {
                 var serilogLogger = new LoggerConfiguration().WriteTo.ColoredConsole().Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
                     || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
@@ -59,13 +85,9 @@ namespace EBook.Downloader.Standard.EBooks
             };
 
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
-            var calibreLibraryPath = Environment.ExpandEnvironmentVariables(args[0]);
-            var outputPath = args.Length > 1 ? Environment.ExpandEnvironmentVariables(args[1]) : ("." + System.IO.Path.DirectorySeparatorChar);
-            var page = args.Length > 2 ? int.Parse(args[2], System.Globalization.CultureInfo.CurrentCulture) : 1;
-            var endPage = args.Length > 3 ? int.Parse(args[3], System.Globalization.CultureInfo.CurrentCulture) : int.MaxValue;
             var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
 
-            using var calibreLibrary = new CalibreLibrary(calibreLibraryPath, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+            using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
             do
             {
                 var any = false;
@@ -77,7 +99,7 @@ namespace EBook.Downloader.Standard.EBooks
                     var title = value.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
                     programLogger.LogInformation("Processing book {Name} - {Title}", name, title);
                     using var bookScope = programLogger.BeginScope("{Name} - {Title}", name, title);
-                    foreach (var epub in ProcessBook(value, name, title))
+                    foreach (var epub in ProcessBook(value))
                     {
                         // get the date time
                         var dateTime = await calibreLibrary.GetDateTimeAsync(value, epub.GetExtension()).ConfigureAwait(false);
@@ -88,7 +110,7 @@ namespace EBook.Downloader.Standard.EBooks
                         }
 
                         // download this
-                        var path = await DownloadBookAsync(epub, outputPath, programLogger, httpClientFactory).ConfigureAwait(false);
+                        var path = await DownloadBookAsync(epub, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
 
                         // parse the format this
                         if (path != null)
@@ -137,7 +159,7 @@ namespace EBook.Downloader.Standard.EBooks
                     yield break;
                 }
 
-                var count = -1;
+                int count;
                 try
                 {
                     count = nodes.Count;
@@ -161,7 +183,7 @@ namespace EBook.Downloader.Standard.EBooks
             }
         }
 
-        private static IEnumerable<Uri> ProcessBook(Uri uri, string name, string title)
+        private static IEnumerable<Uri> ProcessBook(Uri uri)
         {
             string html = null;
             using (var client = new System.Net.WebClient())
@@ -217,9 +239,9 @@ namespace EBook.Downloader.Standard.EBooks
             return fullPath;
         }
 
-        private class ToName : Humanizer.IStringTransformer
+        private class ToName : IStringTransformer
         {
-            public static readonly Humanizer.IStringTransformer Instance = new ToName();
+            public static readonly IStringTransformer Instance = new ToName();
 
             public string Transform(string input)
             {
