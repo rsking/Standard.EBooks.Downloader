@@ -56,7 +56,7 @@ namespace EBook.Downloader.Standard.EBooks
             return rootCommand.InvokeAsync(args);
         }
 
-        private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int page = 1, int endPage = int.MaxValue)
+        private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int startPage = 1, int endPage = int.MaxValue)
         {
             var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((_, services) =>
             {
@@ -91,11 +91,12 @@ namespace EBook.Downloader.Standard.EBooks
             do
             {
                 var any = false;
-                programLogger.LogDebug("Processing page {Page}", page);
-                using var pageScope = programLogger.BeginScope(page);
-                await foreach (var value in ProcessPage(page, httpClientFactory))
+                programLogger.LogDebug("Processing page {Page}", startPage);
+                using var pageScope = programLogger.BeginScope(startPage);
+                await foreach (var value in ProcessPage(startPage, httpClientFactory))
                 {
-                    var name = value.Segments[2].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase, ToName.Instance);
+                    var names = value.Segments[2].Trim('/').Split("_").Select(name => name.Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase, ToName.Instance));
+                    var name = string.Join(" & ", names);
                     var title = value.Segments[3].Trim('/').Replace("-", " ", StringComparison.OrdinalIgnoreCase).Transform(To.TitleCase);
                     programLogger.LogInformation("Processing book {Name} - {Title}", name, title);
                     using var bookScope = programLogger.BeginScope("{Name} - {Title}", name, title);
@@ -133,9 +134,9 @@ namespace EBook.Downloader.Standard.EBooks
                     break;
                 }
 
-                page++;
+                startPage++;
             }
-            while (page < endPage);
+            while (startPage <= endPage);
         }
 
         private static async IAsyncEnumerable<Uri> ProcessPage(int page, System.Net.Http.IHttpClientFactory httpClientFactory)
