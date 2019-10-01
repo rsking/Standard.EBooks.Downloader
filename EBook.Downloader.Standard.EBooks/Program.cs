@@ -60,10 +60,12 @@ namespace EBook.Downloader.Standard.EBooks
         {
             var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((_, services) =>
             {
-                var serilogLogger = new LoggerConfiguration().WriteTo.ColoredConsole().Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
-                    || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
-                    && scalarValue.Value is string stringValue
-                    && stringValue.StartsWith(FilterName, StringComparison.Ordinal))).CreateLogger();
+                var serilogLogger = new LoggerConfiguration().WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
+                    .Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
+                        || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
+                        && scalarValue.Value is string stringValue
+                        && stringValue.StartsWith(FilterName, StringComparison.Ordinal)))
+                    .CreateLogger();
                 services.AddLogging(c => c.AddSerilog(serilogLogger, true));
                 services.AddHttpClient(string.Empty)
                     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
