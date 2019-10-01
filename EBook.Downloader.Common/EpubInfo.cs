@@ -16,9 +16,9 @@ namespace EBook.Downloader.Common
         private EpubInfo(
             System.Collections.Generic.IEnumerable<string> authors,
             string title,
-            string publisher,
+            System.Collections.Generic.IEnumerable<string> publishers,
             string extension,
-            string path) => (this.Authors, this.Title, this.Publisher, this.Extension, this.Path) = (authors, title, publisher, extension, path);
+            string path) => (this.Authors, this.Title, this.Publishers, this.Extension, this.Path) = (authors, title, publishers, extension, path);
 
         /// <summary>
         /// Gets the authors.
@@ -31,9 +31,9 @@ namespace EBook.Downloader.Common
         public string Title { get; }
 
         /// <summary>
-        /// Gets the publisher.
+        /// Gets the publishers.
         /// </summary>
-        public string Publisher { get; }
+        public System.Collections.Generic.IEnumerable<string> Publishers { get; }
 
         /// <summary>
         /// Gets the path.
@@ -88,7 +88,22 @@ namespace EBook.Downloader.Common
             manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
 
             var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
-            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager).InnerText;
+            var publishers = new System.Collections.Generic.List<string>();
+            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
+            if (publisher != null)
+            {
+                publishers.Add(publisher.InnerText);
+            }
+            else
+            {
+                var index = 1;
+                while ((publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) != null)
+                {
+                    publishers.Add(publisher.InnerText);
+                    index++;
+                }
+            }
+
             var authors = new System.Collections.Generic.List<string>();
             var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
             if (author != null)
@@ -105,7 +120,7 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            return new EpubInfo(authors.ToArray(), title, publisher, System.IO.Path.GetExtension(path).TrimStart('.'), path);
+            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), System.IO.Path.GetExtension(path).TrimStart('.'), path);
         }
 
         /// <inheritdoc/>
@@ -114,11 +129,11 @@ namespace EBook.Downloader.Common
         /// <inheritdoc/>
         public bool Equals(EpubInfo other) => this.Title.Equals(other.Title, System.StringComparison.Ordinal)
             && this.Authors.SequenceEqual(other.Authors)
-            && this.Publisher.Equals(other.Publisher, System.StringComparison.Ordinal)
+            && this.Publishers.SequenceEqual(other.Publishers)
             && this.Path.Equals(other.Path, System.StringComparison.Ordinal)
             && this.Extension.Equals(other.Extension, System.StringComparison.Ordinal);
 
         /// <inheritdoc/>
-        public override int GetHashCode() => (this.Title, this.Authors, this.Publisher, this.Path, this.Extension).GetHashCode();
+        public override int GetHashCode() => (this.Title, this.Authors, this.Publishers, this.Path, this.Extension).GetHashCode();
     }
 }

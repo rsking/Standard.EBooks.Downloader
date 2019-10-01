@@ -201,10 +201,12 @@ namespace EBook.Downloader.Common
             string path = default;
             string name = default;
             string lastModified = default;
+            var author = info.Authors.First().Replace(',', '|');
+            var publisher = info.Publishers.First().Replace(',', '|');
 
-            this.selectBookByInfoAndFormatCommand.Parameters[":author"].Value = info.Authors.First().Replace(',', '|');
+            this.selectBookByInfoAndFormatCommand.Parameters[":author"].Value = author;
             this.selectBookByInfoAndFormatCommand.Parameters[":title"].Value = info.Title;
-            this.selectBookByInfoAndFormatCommand.Parameters[":publisher"].Value = info.Publisher;
+            this.selectBookByInfoAndFormatCommand.Parameters[":publisher"].Value = publisher;
             this.selectBookByInfoAndFormatCommand.Parameters[":extension"].Value = info.Extension.ToUpperInvariant();
 
             using (var reader = await this.selectBookByInfoAndFormatCommand.ExecuteReaderAsync().ConfigureAwait(false))
@@ -221,9 +223,9 @@ namespace EBook.Downloader.Common
             if (id == 0 || path == null || name == null)
             {
                 // see if we need to add the book or add the format
-                this.selectBookByInfoCommand.Parameters[":author"].Value = info.Authors.First().Replace(',', '|');
+                this.selectBookByInfoCommand.Parameters[":author"].Value = author;
                 this.selectBookByInfoCommand.Parameters[":title"].Value = info.Title;
-                this.selectBookByInfoCommand.Parameters[":publisher"].Value = info.Publisher;
+                this.selectBookByInfoCommand.Parameters[":publisher"].Value = publisher;
 
                 using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
                 {
