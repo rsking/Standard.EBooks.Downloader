@@ -58,20 +58,24 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int startPage = 1, int endPage = int.MaxValue)
         {
-            var host = new Microsoft.Extensions.Hosting.HostBuilder().ConfigureServices((_, services) =>
-            {
-                var serilogLogger = new LoggerConfiguration().WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
-                    .Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
-                        || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
-                        && scalarValue.Value is string stringValue
-                        && stringValue.StartsWith(FilterName, StringComparison.Ordinal)))
-                    .CreateLogger();
-                services.AddLogging(c => c.AddSerilog(serilogLogger, true));
-                services.AddHttpClient(string.Empty)
-                    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
-                services.AddHttpClient("header")
-                    .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
-            }).Build();
+            var host = new Microsoft.Extensions.Hosting.HostBuilder()
+                .UseSerilog((hostingContext, loggerConfiguration) =>
+                {
+                    loggerConfiguration
+                        .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
+                        .Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
+                            || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
+                            && scalarValue.Value is string stringValue
+                            && stringValue.StartsWith(FilterName, StringComparison.Ordinal)));
+                })
+                .ConfigureServices((_, services) =>
+                {
+                    services.AddHttpClient(string.Empty)
+                        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
+                    services.AddHttpClient("header")
+                        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
+                })
+                .Build();
 
             var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
