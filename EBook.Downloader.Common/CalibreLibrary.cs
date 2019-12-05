@@ -220,7 +220,7 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            if (id == 0 || path == null || name == null)
+            if (id == 0 || path is null || name is null)
             {
                 // see if we need to add the book or add the format
                 this.selectBookByInfoCommand.Parameters[":author"].Value = author;

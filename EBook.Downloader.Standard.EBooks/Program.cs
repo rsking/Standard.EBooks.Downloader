@@ -154,7 +154,7 @@ namespace EBook.Downloader.Standard.EBooks
             {
                 // find all the links to the books
                 var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
-                if (nodes == null)
+                if (nodes is null)
                 {
                     yield break;
                 }
