@@ -9,7 +9,6 @@ namespace EBook.Downloader.Standard.EBooks
     using System;
     using System.Collections.Generic;
     using System.CommandLine;
-    using System.CommandLine.Builder;
     using System.CommandLine.Invocation;
     using System.Linq;
     using System.Threading.Tasks;
@@ -27,8 +26,6 @@ namespace EBook.Downloader.Standard.EBooks
         private const string Uri = "https://standardebooks.org/ebooks/?page={0}";
 
         private static readonly string DefaultOutputPath = "." + System.IO.Path.DirectorySeparatorChar;
-
-        private static readonly string FilterName = typeof(System.Net.Http.HttpClient).FullName;
 
         /// <summary>
         /// The main entry point.
@@ -58,16 +55,12 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int startPage = 1, int endPage = int.MaxValue)
         {
-            var host = new Microsoft.Extensions.Hosting.HostBuilder()
-                .UseSerilog((hostingContext, loggerConfiguration) =>
-                {
-                    loggerConfiguration
-                        .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
-                        .Filter.ByExcluding(log => (log.Level < Serilog.Events.LogEventLevel.Debug)
-                            || (log.Properties["SourceContext"] is Serilog.Events.ScalarValue scalarValue
-                            && scalarValue.Value is string stringValue
-                            && stringValue.StartsWith(FilterName, StringComparison.Ordinal)));
-                })
+            var host = Microsoft.Extensions.Hosting.Host
+                .CreateDefaultBuilder()
+                .UseSerilog((_, loggerConfiguration) => loggerConfiguration
+                    .WriteTo
+                    .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
+                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty)))
                 .ConfigureServices((_, services) =>
                 {
                     services.AddHttpClient(string.Empty)
@@ -96,7 +89,7 @@ namespace EBook.Downloader.Standard.EBooks
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
             do
             {
-                var any = false;
+                var empty = true;
                 programLogger.LogDebug("Processing page {Page}", startPage);
                 using var pageScope = programLogger.BeginScope(startPage);
                 await foreach (var value in ProcessPage(startPage, httpClientFactory))
@@ -118,24 +111,24 @@ namespace EBook.Downloader.Standard.EBooks
 
                         // download this
                         var path = await DownloadBookAsync(epub, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
-
-                        // parse the format this
-                        if (path != null)
+                        if (path is null)
                         {
-                            var epubInfo = EpubInfo.Parse(path);
+                            continue;
+                        }
 
-                            if (await calibreLibrary.UpdateIfExistsAsync(epubInfo, dateTime.HasValue).ConfigureAwait(false))
-                            {
-                                programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
-                                System.IO.File.Delete(epubInfo.Path);
-                            }
+                        var epubInfo = EpubInfo.Parse(path);
+
+                        if (await calibreLibrary.UpdateIfExistsAsync(epubInfo, dateTime.HasValue).ConfigureAwait(false))
+                        {
+                            programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
+                            System.IO.File.Delete(epubInfo.Path);
                         }
                     }
 
-                    any = true;
+                    empty = false;
                 }
 
-                if (!any)
+                if (empty)
                 {
                     break;
                 }
@@ -192,14 +185,14 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static IEnumerable<Uri> ProcessBook(Uri uri)
         {
-            string html = null;
-            using (var client = new System.Net.WebClient())
+            string GetHtml()
             {
-                html = client.DownloadString(uri);
+                using var client = new System.Net.WebClient();
+                return client.DownloadString(uri);
             }
 
             var document = new HtmlAgilityPack.HtmlDocument();
-            document.LoadHtml(html);
+            document.LoadHtml(GetHtml());
 
             if (document.ParseErrors?.Any() == true)
             {
@@ -255,13 +248,10 @@ namespace EBook.Downloader.Standard.EBooks
                 var result = input;
                 var matches = System.Text.RegularExpressions.Regex.Matches(input, @"(\w|[^\u0000-\u007F])+'?\w*");
                 var offset = 0;
-                foreach (System.Text.RegularExpressions.Match word in matches)
+                foreach (var word in matches.Where(w => w?.Length == 1))
                 {
-                    if (word.Length == 1)
-                    {
-                        result = AddPeriod(word, result, offset);
-                        offset += word.Length;
-                    }
+                    result = AddPeriod(word, result, offset);
+                    offset += word.Length;
                 }
 
                 return result;

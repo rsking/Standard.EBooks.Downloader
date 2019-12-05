@@ -44,9 +44,9 @@ namespace EBook.Downloader.Common
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand updateCommand;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand dropTriggerCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand? dropTriggerCommand;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand createTriggerCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand? createTriggerCommand;
 
         private readonly Microsoft.Data.Sqlite.SqliteConnection connection;
 
@@ -198,9 +198,9 @@ namespace EBook.Downloader.Common
         public async Task<bool> UpdateIfExistsAsync(EpubInfo info, bool found)
         {
             int id = default;
-            string path = default;
-            string name = default;
-            string lastModified = default;
+            string? path = default;
+            string? name = default;
+            string? lastModified = default;
             var author = info.Authors.First().Replace(',', '|');
             var publisher = info.Publishers.First().Replace(',', '|');
 
@@ -247,8 +247,40 @@ namespace EBook.Downloader.Common
                         return false;
                     }
 
+                    var coverFile = default(string);
+                    var args = $"--duplicates --languages eng \"{info.Path}\"";
+
+                    // extract out the cover
+                    using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path))
+                    {
+                        var coverEntry = zipFile.Entries.FirstOrDefault(entry => entry.Name == "cover.svg");
+                        if (coverEntry != null)
+                        {
+                            coverFile = System.IO.Path.GetTempFileName();
+                            using var zipStream = coverEntry.Open();
+                            using var fileStream = System.IO.File.OpenWrite(coverFile);
+                            await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
+                            args += $" --cover=\"{coverFile}\"";
+                        }
+                    }
+
+                    if (info.Tags.Any())
+                    {
+                        // sanitise the tags
+                        var sanitisedTags = info.Tags
+                            .SelectMany(tag => tag.Split(new[] { "--" }, StringSplitOptions.RemoveEmptyEntries))
+                            .Select(tag => tag.Trim().Replace(",", ";"))
+                            .Distinct();
+                        args += $" --tags=\"{string.Join(", ", sanitisedTags)}\"";
+                    }
+
                     // we need to add this
-                    this.ExecuteCalibreDbToLogger("add", "--duplicates --languages eng \"" + info.Path + "\"");
+                    this.ExecuteCalibreDbToLogger("add", args);
+                    if (coverFile != default && System.IO.File.Exists(coverFile))
+                    {
+                        System.IO.File.Delete(coverFile);
+                    }
+
                     using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync().ConfigureAwait(false))
@@ -260,10 +292,13 @@ namespace EBook.Downloader.Common
                         }
                     }
 
-                    this.UpdateLastWriteTime(path, name, info);
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                    if (path != null && name != null && lastModified != null)
+                    {
+                        this.UpdateLastWriteTime(path, name, info);
+                        await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                    }
                 }
-                else
+                else if (path != null && name != null && lastModified != null)
                 {
                     // add this format
                     this.ExecuteCalibreDbToLogger("add_format", "--dont-replace " + id + " \"" + info.Path + "\"");
@@ -306,7 +341,10 @@ namespace EBook.Downloader.Common
                     }
 
                     // see if we need to update the last modified time
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                    if (lastModified != null)
+                    {
+                        await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                    }
 
                     return true;
                 }

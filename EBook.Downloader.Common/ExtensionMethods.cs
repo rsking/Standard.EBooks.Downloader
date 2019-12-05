@@ -22,7 +22,7 @@ namespace EBook.Downloader.Common
         /// <param name="dateTime">The last modified date time.</param>
         /// <param name="clientFactory">The client factory.</param>
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
-        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory clientFactory = null)
+        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = null)
         {
             using var client = clientFactory == null
                 ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })
@@ -49,7 +49,7 @@ namespace EBook.Downloader.Common
         /// <param name="overwrite">Set to true to overwrite.</param>
         /// <param name="clientFactory">The client factory.</param>
         /// <returns>The task to download the file.</returns>
-        public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory clientFactory = null)
+        public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory? clientFactory = null)
         {
             using var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
             using var response = await client.GetAsync(uri).ConfigureAwait(false);
@@ -63,7 +63,7 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The uri to download.</param>
         /// <returns>The task to download the string.</returns>
         /// <param name="clientFactory">The client factory.</param>
-        public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory clientFactory = null)
+        public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory? clientFactory = null)
         {
             using var client = clientFactory == null ? new HttpClient() : clientFactory.CreateClient();
             return await client.GetStringAsync(uri).ConfigureAwait(false);
@@ -77,7 +77,7 @@ namespace EBook.Downloader.Common
             }
 
             var pathName = Path.GetFullPath(fileName);
-            FileStream fileStream = null;
+            FileStream? fileStream = default;
             try
             {
                 fileStream = new FileStream(pathName, FileMode.Create, FileAccess.Write, FileShare.None);
