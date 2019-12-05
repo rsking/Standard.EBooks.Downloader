@@ -150,36 +150,38 @@ namespace EBook.Downloader.Standard.EBooks
                 // Handle any parse errors as required
             }
 
-            if (document.DocumentNode != null)
+            if (document.DocumentNode is null)
             {
-                // find all the links to the books
-                var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
-                if (nodes is null)
+                yield break;
+            }
+
+            // find all the links to the books
+            var nodes = document.DocumentNode.SelectNodes("//body/main[@class='ebooks']/ol/li/p/a");
+            if (nodes is null)
+            {
+                yield break;
+            }
+
+            int count;
+            try
+            {
+                count = nodes.Count;
+            }
+            catch (NullReferenceException)
+            {
+                yield break;
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                // get the html attribute
+                if (nodes[i].ParentNode.HasClass("author"))
                 {
-                    yield break;
+                    continue;
                 }
 
-                int count;
-                try
-                {
-                    count = nodes.Count;
-                }
-                catch (NullReferenceException)
-                {
-                    yield break;
-                }
-
-                for (var i = 0; i < count; i++)
-                {
-                    // get the html attribute
-                    if (nodes[i].ParentNode.HasClass("author"))
-                    {
-                        continue;
-                    }
-
-                    var link = nodes[i].GetAttributeValue("href", string.Empty);
-                    yield return new Uri(pageUri, link);
-                }
+                var link = nodes[i].GetAttributeValue("href", string.Empty);
+                yield return new Uri(pageUri, link);
             }
         }
 
@@ -199,25 +201,27 @@ namespace EBook.Downloader.Standard.EBooks
                 // Handle any parse errors as required
             }
 
-            if (document.DocumentNode != null)
+            if (document.DocumentNode is null)
             {
-                var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']");
-                foreach (var node in nodes)
-                {
-                    var link = node.GetAttributeValue("href", string.Empty);
-                    var bookUri = new Uri(uri, link);
-                    if (bookUri.Segments.Last().EndsWith("epub3", StringComparison.Ordinal))
-                    {
-                        yield return bookUri;
-                    }
-                }
+                yield break;
+            }
 
-                nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']");
-                foreach (var node in nodes)
+            var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']");
+            foreach (var node in nodes)
+            {
+                var link = node.GetAttributeValue("href", string.Empty);
+                var bookUri = new Uri(uri, link);
+                if (bookUri.Segments.Last().EndsWith("epub3", StringComparison.Ordinal))
                 {
-                    var link = node.GetAttributeValue("href", string.Empty);
-                    yield return new Uri(uri, link);
+                    yield return bookUri;
                 }
+            }
+
+            nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']");
+            foreach (var node in nodes)
+            {
+                var link = node.GetAttributeValue("href", string.Empty);
+                yield return new Uri(uri, link);
             }
         }
 

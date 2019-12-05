@@ -481,10 +481,12 @@ namespace EBook.Downloader.Common
 
         private void ExecuteCalibreDbToLogger(string command, string arguments = "") => this.ExecuteCalibreDb(command, arguments, (sender, args) =>
         {
-            if (args?.Data != null)
+            if (args?.Data is null)
             {
-                this.logger.LogInformation(0, args.Data);
+                return;
             }
+            
+            this.logger.LogInformation(0, args.Data);
         });
 
         private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler outputDataReceived)
@@ -503,11 +505,13 @@ namespace EBook.Downloader.Common
             process.OutputDataReceived += outputDataReceived;
 
             process.ErrorDataReceived += (sender, args) =>
-            {
-                if (args?.Data != null)
+            {                
+                if (args?.Data is null)
                 {
-                    this.logger.LogError(0, args.Data);
+                    return;
                 }
+
+                this.logger.LogError(0, args.Data);
             };
 
             process.Start();
