@@ -9,11 +9,14 @@ namespace EBook.Downloader.Standard.EBooks
     using System;
     using System.Collections.Generic;
     using System.CommandLine;
+    using System.CommandLine.Builder;
     using System.CommandLine.Invocation;
+    using System.CommandLine.Hosting;
     using System.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
     using Humanizer;
+    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Serilog;
@@ -34,42 +37,35 @@ namespace EBook.Downloader.Standard.EBooks
         /// <returns>The main application task.</returns>
         private static Task Main(string[] args)
         {
-            var rootCommand = new RootCommand("Standard EBook Downloder");
-            rootCommand.AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne });
-            rootCommand.AddOption(new Option(new[] { "--output-path", "-o" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } });
-            rootCommand.AddOption(new Option(new[] { "--start-page", "-s" }, "The start page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } });
-            rootCommand.AddOption(new Option(new[] { "--end-page", "-e" }, "The end page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } });
+            var builder = new System.CommandLine.Builder.CommandLineBuilder(new RootCommand("Standard EBook Downloder"))
+                .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
+                .AddOption(new Option(new[] { "--output-path", "-o" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } })
+                .AddOption(new Option(new[] { "--start-page", "-s" }, "The start page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } })
+                .AddOption(new Option(new[] { "--end-page", "-e" }, "The end page") { Argument = new Argument<int>("PAGE") { Arity = ArgumentArity.ExactlyOne } })
+                .UseHost(
+                    Host.CreateDefaultBuilder,
+                    configureHost =>
+                    {
+                        configureHost
+                            .UseSerilog((_, loggerConfiguration) => loggerConfiguration
+                                .WriteTo
+                                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
+                                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty)))
+                            .ConfigureServices((_, services) => services
+                                .AddHttpClient(string.Empty)
+                                .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
+                                .Services
+                                .AddHttpClient("header")
+                                .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }));
+                    });
 
-            rootCommand.Handler = CommandHandler.Create<System.IO.DirectoryInfo, System.IO.DirectoryInfo, int, int>(Process);
+            builder.Command.Handler = CommandHandler.Create<Microsoft.Extensions.Hosting.IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, int, int>(Process);
 
-            if (args != null)
-            {
-                for (var i = 0; i < args.Length; i++)
-                {
-                    args[i] = Environment.ExpandEnvironmentVariables(args[i]);
-                }
-            }
-
-            return rootCommand.InvokeAsync(args);
+            return builder.Build().InvokeAsync(args.Select(arg => Environment.ExpandEnvironmentVariables(arg)).ToArray());
         }
 
-        private static async Task Process(System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int startPage = 1, int endPage = int.MaxValue)
+        private static async Task Process(Microsoft.Extensions.Hosting.IHost host, System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath, int startPage = 1, int endPage = int.MaxValue)
         {
-            var host = Microsoft.Extensions.Hosting.Host
-                .CreateDefaultBuilder()
-                .UseSerilog((_, loggerConfiguration) => loggerConfiguration
-                    .WriteTo
-                    .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
-                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty)))
-                .ConfigureServices((_, services) =>
-                {
-                    services.AddHttpClient(string.Empty)
-                        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
-                    services.AddHttpClient("header")
-                        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
-                })
-                .Build();
-
             var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {

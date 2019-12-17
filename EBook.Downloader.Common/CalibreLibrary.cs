@@ -485,7 +485,7 @@ namespace EBook.Downloader.Common
             {
                 return;
             }
-            
+
             this.logger.LogInformation(0, args.Data);
         });
 
