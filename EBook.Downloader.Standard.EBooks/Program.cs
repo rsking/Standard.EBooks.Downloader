@@ -10,14 +10,14 @@ namespace EBook.Downloader.Standard.EBooks
     using System.Collections.Generic;
     using System.CommandLine;
     using System.CommandLine.Builder;
-    using System.CommandLine.Invocation;
     using System.CommandLine.Hosting;
+    using System.CommandLine.Invocation;
     using System.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
     using Humanizer;
-    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
     using Serilog;
 
@@ -202,22 +202,18 @@ namespace EBook.Downloader.Standard.EBooks
                 yield break;
             }
 
-            var nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']");
-            foreach (var node in nodes)
+            foreach (var node in document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='epub']"))
             {
-                var link = node.GetAttributeValue("href", string.Empty);
-                var bookUri = new Uri(uri, link);
+                var bookUri = new Uri(uri, node.GetAttributeValue("href", string.Empty));
                 if (bookUri.Segments.Last().EndsWith("epub3", StringComparison.Ordinal))
                 {
                     yield return bookUri;
                 }
             }
 
-            nodes = document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']");
-            foreach (var node in nodes)
+            foreach (var node in document.DocumentNode.SelectNodes("//body/main/article[@class='ebook']/section[@id='download']/ul/li/p/span/a[@class='kobo']"))
             {
-                var link = node.GetAttributeValue("href", string.Empty);
-                yield return new Uri(uri, link);
+                yield return new Uri(uri, node.GetAttributeValue("href", string.Empty));
             }
         }
 
@@ -225,7 +221,6 @@ namespace EBook.Downloader.Standard.EBooks
         {
             // create the file name
             var fileName = uri.GetFileName();
-
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
 
             // get the last part of the URI
@@ -245,10 +240,16 @@ namespace EBook.Downloader.Standard.EBooks
 
             public string Transform(string input)
             {
+                static string AddPeriod(System.Text.RegularExpressions.Match word, string source, int offset)
+                {
+                    return source.Substring(0, offset + word.Index + word.Length) + "." + source.Substring(offset + word.Index + word.Length);
+                }
+
                 var result = input;
-                var matches = System.Text.RegularExpressions.Regex.Matches(input, @"(\w|[^\u0000-\u007F])+'?\w*");
                 var offset = 0;
-                foreach (var word in matches.Where(w => w?.Length == 1))
+                foreach (var word in System.Text.RegularExpressions.Regex
+                    .Matches(input, @"(\w|[^\u0000-\u007F])+'?\w*")
+                    .Where(w => w?.Length == 1))
                 {
                     result = AddPeriod(word, result, offset);
                     offset += word.Length;
@@ -256,8 +257,6 @@ namespace EBook.Downloader.Standard.EBooks
 
                 return result;
             }
-
-            private static string AddPeriod(System.Text.RegularExpressions.Match word, string source, int offset) => source.Substring(0, offset + word.Index + word.Length) + "." + source.Substring(offset + word.Index + word.Length);
         }
     }
 }
