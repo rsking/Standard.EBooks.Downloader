@@ -18,8 +18,9 @@ namespace EBook.Downloader.Common
             string title,
             System.Collections.Generic.IEnumerable<string> publishers,
             System.Collections.Generic.IEnumerable<string> tags,
+            System.Collections.Generic.IReadOnlyDictionary<string, string> identifiers,
             string extension,
-            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Extension, this.Path) = (authors, title, publishers, tags, extension, path);
+            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Identifiers, this.Extension, this.Path) = (authors, title, publishers, tags, identifiers, extension, path);
 
         /// <summary>
         /// Gets the authors.
@@ -40,6 +41,11 @@ namespace EBook.Downloader.Common
         /// Gets the tags.
         /// </summary>
         public System.Collections.Generic.IEnumerable<string> Tags { get; }
+
+        /// <summary>
+        /// Gets the identifiers.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> Identifiers { get; }
 
         /// <summary>
         /// Gets the path.
@@ -138,7 +144,15 @@ namespace EBook.Downloader.Common
                 tags.Add(tag.InnerText);
             }
 
-            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), System.IO.Path.GetExtension(path).TrimStart('.'), path);
+            var identifiers = new System.Collections.Generic.Dictionary<string, string>();
+            var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
+            if (!(identifier is null))
+            {
+                var split = identifier.InnerText.Split(new[] { ':' }, 2);
+                identifiers.Add(split[0], split[1]);
+            }
+
+            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, System.IO.Path.GetExtension(path).TrimStart('.'), path);
         }
 
         /// <inheritdoc/>

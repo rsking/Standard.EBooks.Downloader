@@ -20,13 +20,11 @@ namespace EBook.Downloader.Common
 
         private const string TriggerName = "books_update_trg";
 
-        private const string SelectByInfo = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN books_publishers_link bpl ON b.id = bpl.book INNER JOIN publishers p ON bpl.publisher = p.id INNER JOIN books_authors_link bal ON b.id = bal.book INNER JOIN authors a ON bal.author = a.id WHERE a.name = :author AND b.title = :title AND p.name = :publisher";
-
-        private const string SelectByInfoAndFormat = SelectByInfo + " AND d.format = :extension";
-
         private const string SelectById = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book WHERE b.id = :id AND d.format = :extension";
 
-        private const string SelectByUrl = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = 'url' AND i.val = :uri LIMIT 1";
+        private const string SelectByIdentifier = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier LIMIT 1";
+
+        private const string SelectByIdentifierAndExtension = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier AND d.format = :extension LIMIT 1";
 
         private const string UpdateById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
 
@@ -34,13 +32,11 @@ namespace EBook.Downloader.Common
 
         private readonly string calibreDbPath;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdAndExtensionCommand;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByInfoAndFormatCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdentifierCommand;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdCommand;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByUrlCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdentifierAndExtensionCommand;
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand updateCommand;
 
@@ -68,33 +64,24 @@ namespace EBook.Downloader.Common
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
             this.connection.Open();
 
-            this.selectBookByInfoCommand = this.connection.CreateCommand();
-            this.selectBookByInfoCommand.CommandText = SelectByInfo;
-            this.selectBookByInfoCommand.Parameters.Add(":author", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByInfoCommand.Parameters.Add(":title", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByInfoCommand.Parameters.Add(":publisher", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByInfoCommand.Prepare();
+            this.selectBookByIdAndExtensionCommand = this.connection.CreateCommand();
+            this.selectBookByIdAndExtensionCommand.CommandText = SelectById;
+            this.selectBookByIdAndExtensionCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+            this.selectBookByIdAndExtensionCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdAndExtensionCommand.Prepare();
 
-            this.selectBookByInfoAndFormatCommand = this.connection.CreateCommand();
-            this.selectBookByInfoAndFormatCommand.CommandText = SelectByInfoAndFormat;
-            foreach (Microsoft.Data.Sqlite.SqliteParameter parameter in this.selectBookByInfoCommand.Parameters)
-            {
-                this.selectBookByInfoAndFormatCommand.Parameters.Add(parameter.ParameterName, parameter.SqliteType);
-            }
+            this.selectBookByIdentifierCommand = this.connection.CreateCommand();
+            this.selectBookByIdentifierCommand.CommandText = SelectByIdentifier;
+            this.selectBookByIdentifierCommand.Parameters.Add(":type", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdentifierCommand.Parameters.Add(":identifier", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdentifierCommand.Prepare();
 
-            this.selectBookByInfoAndFormatCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByInfoAndFormatCommand.Prepare();
-
-            this.selectBookByIdCommand = this.connection.CreateCommand();
-            this.selectBookByIdCommand.CommandText = SelectById;
-            this.selectBookByIdCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
-            this.selectBookByIdCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdCommand.Prepare();
-
-            this.selectBookByUrlCommand = this.connection.CreateCommand();
-            this.selectBookByUrlCommand.CommandText = SelectByUrl;
-            this.selectBookByUrlCommand.Parameters.Add(":uri", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByUrlCommand.Prepare();
+            this.selectBookByIdentifierAndExtensionCommand = this.connection.CreateCommand();
+            this.selectBookByIdentifierAndExtensionCommand.CommandText = SelectByIdentifierAndExtension;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":type", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":identifier", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.selectBookByIdentifierAndExtensionCommand.Prepare();
 
             this.updateCommand = this.connection.CreateCommand();
             this.updateCommand.CommandText = UpdateById;
@@ -125,51 +112,30 @@ namespace EBook.Downloader.Common
         public string Path { get; }
 
         /// <summary>
-        /// Gets the last-modified for a specified URL.
-        /// </summary>
-        /// <param name="uri">The URL identifier.</param>
-        /// <returns>The last modified date time.</returns>
-        public async Task<DateTime?> GetDateTimeAsync(Uri uri)
-        {
-            if (uri is null)
-            {
-                return null;
-            }
-
-            // get the date time of the format
-            this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
-
-            using var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false);
-            if (await reader.ReadAsync().ConfigureAwait(false))
-            {
-                return DateTime.Parse(reader.GetString(3), System.Globalization.CultureInfo.InvariantCulture);
-            }
-
-            return null;
-        }
-
-        /// <summary>
         /// Gets the last-modified for a specified URL and format.
         /// </summary>
-        /// <param name="uri">The URL identifier.</param>
+        /// <param name="identifier">The identifier.</param>
+        /// <param name="type">The type of identifier.</param>
         /// <param name="extension">The format to check.</param>
         /// <returns>The last modified date time.</returns>
-        public async Task<DateTime?> GetDateTimeAsync(Uri uri, string extension)
+        public async Task<DateTime?> GetDateTimeByIdentifierAndExtensionAsync(string identifier, string type, string extension)
         {
-            if (uri is null)
+            if (identifier is null)
             {
                 return null;
             }
 
             // get the date time of the format
-            this.selectBookByUrlCommand.Parameters[":uri"].Value = uri.ToString();
-            (int id, string path, string name, string lastModified) values = default;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = type;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = extension.TrimStart('.').ToUpperInvariant();
+            (int id, string path, string name, string lastModified) book = default;
 
-            using (var reader = await this.selectBookByUrlCommand.ExecuteReaderAsync().ConfigureAwait(false))
+            using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
                 if (await reader.ReadAsync().ConfigureAwait(false))
                 {
-                    values = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+                    book = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
                 }
                 else
                 {
@@ -177,12 +143,12 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            var fullPath = System.IO.Path.Combine(this.Path, values.path, $"{values.name}{extension}");
+            var fullPath = System.IO.Path.Combine(this.Path, book.path, $"{book.name}{extension}");
 
             if (System.IO.File.Exists(fullPath))
             {
                 var fileInfo = new System.IO.FileInfo(fullPath);
-                await this.UpdateLastModifiedAsync(values.id, values.name, fileInfo, values.lastModified).ConfigureAwait(false);
+                await this.UpdateLastModifiedAsync(book.id, book.name, fileInfo, book.lastModified).ConfigureAwait(false);
                 return fileInfo.LastWriteTimeUtc;
             }
 
@@ -193,60 +159,41 @@ namespace EBook.Downloader.Common
         /// Updates the EPUB if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
-        /// <param name="found">Set to <see langword="true"/> if the book was already found.</param>
         /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" />.</returns>
-        public async Task<bool> UpdateIfExistsAsync(EpubInfo info, bool found)
+        public async Task<bool> UpdateIfExistsAsync(EpubInfo info)
         {
-            int id = default;
-            string? path = default;
-            string? name = default;
-            string? lastModified = default;
-            var author = info.Authors.First().Replace(',', '|');
-            var publisher = info.Publishers.First().Replace(',', '|');
+            (int id, string path, string name, string lastModified) book = default;
 
-            this.selectBookByInfoAndFormatCommand.Parameters[":author"].Value = author;
-            this.selectBookByInfoAndFormatCommand.Parameters[":title"].Value = info.Title;
-            this.selectBookByInfoAndFormatCommand.Parameters[":publisher"].Value = publisher;
-            this.selectBookByInfoAndFormatCommand.Parameters[":extension"].Value = info.Extension.ToUpperInvariant();
+            var identifier = info.Identifiers.First();
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = identifier.Key;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier.Value;
+            this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = info.Extension.TrimStart('.').ToUpperInvariant();
 
-            using (var reader = await this.selectBookByInfoAndFormatCommand.ExecuteReaderAsync().ConfigureAwait(false))
+            using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
             {
                 if (await reader.ReadAsync().ConfigureAwait(false))
                 {
-                    id = reader.GetInt32(0);
-                    path = reader.GetString(1);
-                    name = reader.GetString(2);
-                    lastModified = reader.GetString(3);
+                    book = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
                 }
             }
 
-            if (id == 0 || path is null || name is null)
+            if (book.id == default || book.path is null || book.name is null)
             {
                 // see if we need to add the book or add the format
-                this.selectBookByInfoCommand.Parameters[":author"].Value = author;
-                this.selectBookByInfoCommand.Parameters[":title"].Value = info.Title;
-                this.selectBookByInfoCommand.Parameters[":publisher"].Value = publisher;
+                this.selectBookByIdentifierCommand.Parameters[":type"].Value = identifier.Key;
+                this.selectBookByIdentifierCommand.Parameters[":identifier"].Value = identifier.Value;
 
-                using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
+                using (var reader = await this.selectBookByIdentifierCommand.ExecuteReaderAsync().ConfigureAwait(false))
                 {
                     if (await reader.ReadAsync().ConfigureAwait(false))
                     {
-                        id = reader.GetInt32(0);
-                        path = reader.GetString(1);
-                        name = reader.GetString(2);
-                        lastModified = reader.GetString(3);
+                        book = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
                     }
                 }
 
-                if (id == 0)
+                if (book.id == 0)
                 {
-                    if (found)
-                    {
-                        // this was previously found
-                        this.logger.LogError("Failed to find {Book} by {Author} by data, but found by URI, check data", info.Title, info.Authors.First().Replace(',', '|'));
-                        return false;
-                    }
-
+                    // add this book
                     var coverFile = default(string);
                     var args = $"--duplicates --languages eng \"{info.Path}\"";
 
@@ -281,43 +228,33 @@ namespace EBook.Downloader.Common
                         System.IO.File.Delete(coverFile);
                     }
 
-                    using (var reader = await this.selectBookByInfoCommand.ExecuteReaderAsync().ConfigureAwait(false))
+                    using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
                     {
                         if (await reader.ReadAsync().ConfigureAwait(false))
                         {
-                            id = reader.GetInt32(0);
-                            path = reader.GetString(1);
-                            name = reader.GetString(2);
-                            lastModified = reader.GetString(3);
+                            book = (reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
                         }
                     }
 
-                    if (path != null && name != null && lastModified != null)
+                    if (book.path != null && book.name != null && book.lastModified != null)
                     {
-                        this.UpdateLastWriteTime(path, name, info);
-                        await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                        this.UpdateLastWriteTime(book.path, book.name, info);
+                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
                     }
                 }
-                else if (path != null && name != null && lastModified != null)
+                else if (book.path != null && book.name != null && book.lastModified != null)
                 {
                     // add this format
-                    this.ExecuteCalibreDbToLogger("add_format", "--dont-replace " + id + " \"" + info.Path + "\"");
-                    this.UpdateLastWriteTime(path, name, info);
-                    await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                    this.ExecuteCalibreDbToLogger("add_format", "--dont-replace " + book.id + " \"" + info.Path + "\"");
+                    this.UpdateLastWriteTime(book.path, book.name, info);
+                    await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
                 }
 
                 return true;
             }
             else
             {
-                if (!found)
-                {
-                    // this was previously found
-                    this.logger.LogError("Fount {Book} by {Author} by data, but this was not found by URI, check data", info.Title, info.Authors.First().Replace(',', '|'));
-                    return false;
-                }
-
-                var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
+                var fullPath = System.IO.Path.Combine(this.Path, book.path, $"{book.name}{System.IO.Path.GetExtension(info.Path)}");
 
                 if (System.IO.File.Exists(fullPath))
                 {
@@ -325,7 +262,7 @@ namespace EBook.Downloader.Common
                     if (!CheckFiles(info.Path, fullPath, this.logger))
                     {
                         // files are not the same. Copy in the new file
-                        this.logger.LogInformation("Replacing {0} as files do not match", name);
+                        this.logger.LogInformation("Replacing {0} as files do not match", book.name);
 
                         // access the destination file first
                         var bytes = new byte[ushort.MaxValue];
@@ -341,9 +278,9 @@ namespace EBook.Downloader.Common
                     }
 
                     // see if we need to update the last modified time
-                    if (lastModified != null)
+                    if (book.lastModified != null)
                     {
-                        await this.UpdateLastModifiedAsync(id, name, info.Path, lastModified).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
                     }
 
                     return true;
@@ -373,10 +310,9 @@ namespace EBook.Downloader.Common
             {
                 if (disposing)
                 {
-                    this.selectBookByInfoCommand?.Dispose();
-                    this.selectBookByInfoAndFormatCommand?.Dispose();
-                    this.selectBookByIdCommand?.Dispose();
-                    this.selectBookByUrlCommand?.Dispose();
+                    this.selectBookByIdAndExtensionCommand?.Dispose();
+                    this.selectBookByIdentifierCommand?.Dispose();
+                    this.selectBookByIdentifierAndExtensionCommand?.Dispose();
                     this.updateCommand?.Dispose();
                     this.dropTriggerCommand?.Dispose();
                     this.createTriggerCommand?.Dispose();
@@ -505,7 +441,7 @@ namespace EBook.Downloader.Common
             process.OutputDataReceived += outputDataReceived;
 
             process.ErrorDataReceived += (sender, args) =>
-            {                
+            {
                 if (args?.Data is null)
                 {
                     return;
