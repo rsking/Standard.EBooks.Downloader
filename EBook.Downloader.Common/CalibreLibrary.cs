@@ -22,7 +22,7 @@ namespace EBook.Downloader.Common
 
         private const string SelectById = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book WHERE b.id = :id AND d.format = :extension";
 
-        private const string SelectByIdentifier = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier LIMIT 1";
+        private const string SelectByIdentifier = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier LIMIT 1";
 
         private const string SelectByIdentifierAndExtension = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier AND d.format = :extension LIMIT 1";
 
