@@ -222,7 +222,7 @@ namespace EBook.Downloader.Common
                     }
 
                     // we need to add this
-                    this.ExecuteCalibreDbToLogger("add", args);
+                    this.ExecuteCalibreDb("add", args);
                     if (coverFile != default && System.IO.File.Exists(coverFile))
                     {
                         System.IO.File.Delete(coverFile);
@@ -245,7 +245,7 @@ namespace EBook.Downloader.Common
                 else if (book.path != null && book.name != null && book.lastModified != null)
                 {
                     // add this format
-                    this.ExecuteCalibreDbToLogger("add_format", "--dont-replace " + book.id + " \"" + info.Path + "\"");
+                    this.ExecuteCalibreDb("add_format", "--dont-replace " + book.id + " \"" + info.Path + "\"");
                     this.UpdateLastWriteTime(book.path, book.name, info);
                     await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
                 }
@@ -330,7 +330,7 @@ namespace EBook.Downloader.Common
 
             if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
             {
-                logger.LogDebug("\tsource and destination have different modified dates");
+                logger.LogDebug("source and destination have different modified dates");
                 return false;
             }
 
@@ -415,19 +415,10 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private void ExecuteCalibreDbToLogger(string command, string arguments = "") => this.ExecuteCalibreDb(command, arguments, (sender, args) =>
-        {
-            if (args?.Data is null)
-            {
-                return;
-            }
-
-            this.logger.LogInformation(0, args.Data);
-        });
-
-        private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler outputDataReceived)
+        private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler? outputDataReceived = default)
         {
             var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
+            this.logger.LogDebug(fullArguments);
 
             var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)
             {
@@ -438,7 +429,17 @@ namespace EBook.Downloader.Common
 
             using var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
 
-            process.OutputDataReceived += outputDataReceived;
+            void DefaultOutputDataReceived(object sender, System.Diagnostics.DataReceivedEventArgs args) 
+            {
+                if (args?.Data is null)
+                {
+                    return;
+                }
+
+                this.logger.LogInformation(0, args.Data);
+            }
+
+            process.OutputDataReceived += outputDataReceived ?? DefaultOutputDataReceived;
 
             process.ErrorDataReceived += (sender, args) =>
             {
