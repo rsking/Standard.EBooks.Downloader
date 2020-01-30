@@ -26,7 +26,11 @@ namespace EBook.Downloader.Common
 
         private const string SelectByIdentifierAndExtension = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier AND d.format = :extension LIMIT 1";
 
-        private const string UpdateById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
+        private const string SelectDescriptionById = "SELECT text from comments where book = :id";
+
+        private const string UpdateLastModifiedById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
+
+        private const string UpdateDescriptionById = "UPDATE comments SET text = :text WHERE book = :id";
 
         private readonly ILogger logger;
 
@@ -38,7 +42,11 @@ namespace EBook.Downloader.Common
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdentifierAndExtensionCommand;
 
-        private readonly Microsoft.Data.Sqlite.SqliteCommand updateCommand;
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectDescriptionCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand updateLastModifiedCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand updateDescriptionCommand;
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand? dropTriggerCommand;
 
@@ -83,10 +91,19 @@ namespace EBook.Downloader.Common
             this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
             this.selectBookByIdentifierAndExtensionCommand.Prepare();
 
-            this.updateCommand = this.connection.CreateCommand();
-            this.updateCommand.CommandText = UpdateById;
-            this.updateCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.updateCommand.Parameters.AddWithValue(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+            this.selectDescriptionCommand = this.connection.CreateCommand();
+            this.selectDescriptionCommand.CommandText = SelectDescriptionById;
+            this.selectDescriptionCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+            this.updateDescriptionCommand = this.connection.CreateCommand();
+            this.updateDescriptionCommand.CommandText = UpdateDescriptionById;
+            this.updateDescriptionCommand.Parameters.Add(":text", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.updateDescriptionCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+            this.updateLastModifiedCommand = this.connection.CreateCommand();
+            this.updateLastModifiedCommand.CommandText = UpdateLastModifiedById;
+            this.updateLastModifiedCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
+            this.updateLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
             var createTriggerCommandText = default(string);
             using (var command = this.connection.CreateCommand())
@@ -148,7 +165,8 @@ namespace EBook.Downloader.Common
             if (System.IO.File.Exists(fullPath))
             {
                 var fileInfo = new System.IO.FileInfo(fullPath);
-                await this.UpdateLastModifiedAsync(book.id, book.name, fileInfo, book.lastModified).ConfigureAwait(false);
+                var info = EpubInfo.Parse(fileInfo.FullName);
+                await this.UpdateLastModifiedAsync(book.id, book.name, fileInfo, book.lastModified, info.LongDescription).ConfigureAwait(false);
                 return fileInfo.LastWriteTimeUtc;
             }
 
@@ -239,7 +257,7 @@ namespace EBook.Downloader.Common
                     if (book.path != null && book.name != null && book.lastModified != null)
                     {
                         this.UpdateLastWriteTime(book.path, book.name, info);
-                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified, info.LongDescription).ConfigureAwait(false);
                     }
                 }
                 else if (book.path != null && book.name != null && book.lastModified != null)
@@ -247,7 +265,7 @@ namespace EBook.Downloader.Common
                     // add this format
                     this.ExecuteCalibreDb("add_format", "--dont-replace " + book.id + " \"" + info.Path + "\"");
                     this.UpdateLastWriteTime(book.path, book.name, info);
-                    await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified, info.LongDescription).ConfigureAwait(false);
                 }
 
                 return true;
@@ -280,7 +298,7 @@ namespace EBook.Downloader.Common
                     // see if we need to update the last modified time
                     if (book.lastModified != null)
                     {
-                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book.id, book.name, info.Path, book.lastModified, info.LongDescription).ConfigureAwait(false);
                     }
 
                     return true;
@@ -313,7 +331,7 @@ namespace EBook.Downloader.Common
                     this.selectBookByIdAndExtensionCommand?.Dispose();
                     this.selectBookByIdentifierCommand?.Dispose();
                     this.selectBookByIdentifierAndExtensionCommand?.Dispose();
-                    this.updateCommand?.Dispose();
+                    this.updateLastModifiedCommand?.Dispose();
                     this.dropTriggerCommand?.Dispose();
                     this.createTriggerCommand?.Dispose();
                     this.connection?.Dispose();
@@ -368,13 +386,22 @@ namespace EBook.Downloader.Common
             return sha.ComputeHash(stream);
         }
 
-        private Task UpdateLastModifiedAsync(int id, string name, string path, string lastModified) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path), lastModified);
+        private Task UpdateLastModifiedAsync(int id, string name, string path, string lastModified, System.Xml.XmlElement? longDescription) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path), lastModified, longDescription);
 
-        private async Task UpdateLastModifiedAsync(int id, string name, System.IO.FileInfo sourceFileInfo, string lastModified)
+        private async Task UpdateLastModifiedAsync(int id, string name, System.IO.FileInfo sourceFileInfo, string lastModified, System.Xml.XmlElement? longDescription)
         {
             var sourceLastWriteTime = sourceFileInfo.LastWriteTimeUtc;
             var sourceLastWriteTimeFormat = sourceLastWriteTime.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
-            if (sourceLastWriteTimeFormat == lastModified)
+
+            var descriptionChanged = false;
+            if (!(longDescription is null))
+            {
+                this.selectDescriptionCommand.Parameters[":id"].Value = id;
+                var description = await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string;
+                descriptionChanged = description != longDescription.OuterXml;
+            }
+
+            if (sourceLastWriteTimeFormat == lastModified && !descriptionChanged)
             {
                 return;
             }
@@ -386,20 +413,27 @@ namespace EBook.Downloader.Common
             {
                 // write this to the database
                 this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModifiedDateTime.ToUniversalTime(), sourceLastWriteTime);
-                this.updateCommand.Parameters[":lastModified"].Value = sourceLastWriteTimeFormat;
-                this.updateCommand.Parameters[":id"].Value = id;
+                this.updateLastModifiedCommand.Parameters[":lastModified"].Value = sourceLastWriteTimeFormat;
+                this.updateLastModifiedCommand.Parameters[":id"].Value = id;
 
                 if (this.dropTriggerCommand != null)
                 {
                     await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                 }
 
-                await this.updateCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
+                await this.updateLastModifiedCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
 
                 if (this.createTriggerCommand != null)
                 {
                     await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                 }
+            }
+
+            if (descriptionChanged)
+            {
+                this.updateDescriptionCommand.Parameters[":id"].Value = id;
+                this.updateDescriptionCommand.Parameters[":text"].Value = longDescription!.OuterXml;
+                await this.updateDescriptionCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
         }
 

@@ -19,8 +19,10 @@ namespace EBook.Downloader.Common
             System.Collections.Generic.IEnumerable<string> publishers,
             System.Collections.Generic.IEnumerable<string> tags,
             System.Collections.Generic.IReadOnlyDictionary<string, string> identifiers,
+            string? description,
+            System.Xml.XmlElement? longDescription,
             string extension,
-            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Identifiers, this.Extension, this.Path) = (authors, title, publishers, tags, identifiers, extension, path);
+            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Identifiers, this.Description, this.LongDescription, this.Extension, this.Path) = (authors, title, publishers, tags, identifiers, description, longDescription, extension, path);
 
         /// <summary>
         /// Gets the authors.
@@ -46,6 +48,16 @@ namespace EBook.Downloader.Common
         /// Gets the identifiers.
         /// </summary>
         public System.Collections.Generic.IReadOnlyDictionary<string, string> Identifiers { get; }
+
+        /// <summary>
+        /// Gets the description.
+        /// </summary>
+        public string? Description { get; }
+
+        /// <summary>
+        /// Gets the long description.
+        /// </summary>
+        public System.Xml.XmlElement? LongDescription { get; }
 
         /// <summary>
         /// Gets the path.
@@ -152,7 +164,18 @@ namespace EBook.Downloader.Common
                 identifiers.Add(split[0], split[1]);
             }
 
-            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, System.IO.Path.GetExtension(path).TrimStart('.'), path);
+            var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
+
+            System.Xml.XmlElement? longDescription = default;
+            var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
+            if (node != null && node.InnerText != null)
+            {
+                //var document = new System.Xml.XmlDocument();
+                longDescription = document.CreateElement("div");
+                longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
+            }
+
+            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, System.IO.Path.GetExtension(path).TrimStart('.'), path);
         }
 
         /// <inheritdoc/>
