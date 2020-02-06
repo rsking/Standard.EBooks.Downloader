@@ -170,7 +170,6 @@ namespace EBook.Downloader.Common
             var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
             if (node != null && node.InnerText != null)
             {
-                //var document = new System.Xml.XmlDocument();
                 longDescription = document.CreateElement("div");
                 longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
             }

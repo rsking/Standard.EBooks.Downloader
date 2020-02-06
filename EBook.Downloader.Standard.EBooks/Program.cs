@@ -7,15 +7,14 @@
 namespace EBook.Downloader.Standard.EBooks
 {
     using System;
-    using System.Collections.Generic;
     using System.CommandLine;
     using System.CommandLine.Builder;
     using System.CommandLine.Hosting;
     using System.CommandLine.Invocation;
+    using System.CommandLine.Parsing;
     using System.Linq;
     using System.Threading.Tasks;
     using EBook.Downloader.Common;
-    using Humanizer;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
@@ -39,7 +38,8 @@ namespace EBook.Downloader.Standard.EBooks
         {
             var builder = new System.CommandLine.Builder.CommandLineBuilder(new RootCommand("Standard EBook Downloder"))
                 .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
-                .AddOption(new Option(new[] { "--output-path", "-o" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } })
+                .AddOption(new Option(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } })
+                .AddOption(new Option(new[] { "-c", "--check-description" }, "Whether to check the description") { Argument = new Argument<bool> { Arity = ArgumentArity.ZeroOrOne } })
                 .UseHost(
                     Host.CreateDefaultBuilder,
                     configureHost =>
@@ -57,12 +57,16 @@ namespace EBook.Downloader.Standard.EBooks
                                 .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }));
                     });
 
-            builder.Command.Handler = CommandHandler.Create<Microsoft.Extensions.Hosting.IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo>(Process);
+            builder.Command.Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool>(Process);
 
             return builder.Build().InvokeAsync(args.Select(arg => Environment.ExpandEnvironmentVariables(arg)).ToArray());
         }
 
-        private static async Task Process(Microsoft.Extensions.Hosting.IHost host, System.IO.DirectoryInfo calibreLibraryPath, System.IO.DirectoryInfo outputPath)
+        private static async Task Process(
+            IHost host,
+            System.IO.DirectoryInfo calibreLibraryPath,
+            System.IO.DirectoryInfo outputPath,
+            bool checkDescription)
         {
             var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -98,10 +102,28 @@ namespace EBook.Downloader.Standard.EBooks
                     .Select(link => link.Uri.IsAbsoluteUri ? link.Uri : new System.Uri(Uri, link.Uri.OriginalString)))
                 {
                     // get the date time
-                    var dateTime = await calibreLibrary.GetDateTimeByIdentifierAndExtensionAsync(item.Id, "url", uri.GetExtension()).ConfigureAwait(false);
-                    if (dateTime.HasValue && !(await uri.ShouldDownloadAsync(dateTime.Value, httpClientFactory).ConfigureAwait(false)))
+                    var extension = uri.GetExtension();
+                    var book = await calibreLibrary.GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension).ConfigureAwait(false);
+                    if (book.Id != 0)
                     {
-                        continue;
+                        // see if we should update the date time
+                        var filePath = book.GetFullPath(calibreLibrary.Path, extension);
+
+                        if (System.IO.File.Exists(filePath))
+                        {
+                            System.Xml.XmlElement? longDescription = default;
+                            if (checkDescription)
+                            {
+                                longDescription = EpubInfo.Parse(filePath).LongDescription;
+                            }
+
+                            var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
+                            await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription).ConfigureAwait(false);
+                            if (!(await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory).ConfigureAwait(false)))
+                            {
+                                continue;
+                            }
+                        }
                     }
 
                     // download this
