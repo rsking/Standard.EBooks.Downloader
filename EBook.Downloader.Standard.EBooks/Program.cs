@@ -27,8 +27,6 @@ namespace EBook.Downloader.Standard.EBooks
     {
         private static readonly System.Uri Uri = new System.UriBuilder("https://standardebooks.org/opds/all").Uri;
 
-        private static readonly string DefaultOutputPath = "." + System.IO.Path.DirectorySeparatorChar;
-
         /// <summary>
         /// The main entry point.
         /// </summary>
@@ -38,7 +36,7 @@ namespace EBook.Downloader.Standard.EBooks
         {
             var builder = new System.CommandLine.Builder.CommandLineBuilder(new RootCommand("Standard EBook Downloder"))
                 .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
-                .AddOption(new Option(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(DefaultOutputPath)) { Arity = ArgumentArity.ExactlyOne } })
+                .AddOption(new Option(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(System.Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } })
                 .AddOption(new Option(new[] { "-c", "--check-description" }, "Whether to check the description") { Argument = new Argument<bool> { Arity = ArgumentArity.ZeroOrOne } })
                 .UseHost(
                     Host.CreateDefaultBuilder,
