@@ -240,17 +240,15 @@ namespace EBook.Downloader.Common
                             book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
                         }
                     }
-
-                    if (book.Path != null && book.Name != null)
-                    {
-                        this.UpdateLastWriteTime(book.Path, book.Name, info);
-                        await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, info.LongDescription).ConfigureAwait(false);
-                    }
                 }
-                else if (book.Path != null && book.Name != null)
+                else if (book.Path != null && info.Path != null)
                 {
                     // add this format
                     this.ExecuteCalibreDb("add_format", "--dont-replace " + book.Id + " \"" + info.Path + "\"");
+                }
+
+                if (book.Path != null && book.Name != null && info.Path != null)
+                {
                     this.UpdateLastWriteTime(book.Path, book.Name, info);
                     await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, info.LongDescription).ConfigureAwait(false);
                 }
