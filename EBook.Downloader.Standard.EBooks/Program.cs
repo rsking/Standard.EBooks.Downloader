@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -130,8 +130,7 @@ namespace EBook.Downloader.Standard.EBooks
                     }
 
                     var epubInfo = EpubInfo.Parse(path);
-
-                    if (await calibreLibrary.UpdateIfExistsAsync(epubInfo).ConfigureAwait(false))
+                    if (await calibreLibrary.AddOrUpdateAsync(epubInfo).ConfigureAwait(false))
                     {
                         programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
                         System.IO.File.Delete(epubInfo.Path);

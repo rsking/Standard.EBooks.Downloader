@@ -161,11 +161,11 @@ namespace EBook.Downloader.Common
         }
 
         /// <summary>
-        /// Updates the EPUB if it exists in the calibre library.
+        /// Adds a new book, or updates the book if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
-        /// <returns><see langword="true"/> if the EPUB has been updated; otherwise <see langword="false" />.</returns>
-        public async Task<bool> UpdateIfExistsAsync(EpubInfo info)
+        /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
+        public async Task<bool> AddOrUpdateAsync(EpubInfo info)
         {
             CalibreBook book = default;
 
@@ -233,15 +233,8 @@ namespace EBook.Downloader.Common
                         System.IO.File.Delete(coverFile);
                     }
 
-                    using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
-                    {
-                        if (await reader.ReadAsync().ConfigureAwait(false))
-                        {
-                            book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
-                        }
-                    }
                 }
-                else if (book.Path != null && info.Path != null)
+                else if (book.Id != default && info.Path != null)
                 {
                     // add this format
                     this.ExecuteCalibreDb("add_format", "--dont-replace " + book.Id + " \"" + info.Path + "\"");
