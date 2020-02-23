@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -45,8 +45,9 @@ namespace EBook.Downloader.Standard.EBooks
                         configureHost
                             .UseSerilog((_, loggerConfiguration) => loggerConfiguration
                                 .WriteTo
-                                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture)
-                                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty)))
+                                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
+                                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
+                                .Enrich.WithThreadId())
                             .ConfigureServices((_, services) => services
                                 .AddHttpClient(string.Empty)
                                 .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
@@ -90,7 +91,9 @@ namespace EBook.Downloader.Standard.EBooks
             }
 
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
-            foreach (var item in atom.Feed.Items.OrderByDescending(item => item.LastUpdatedTime))
+            foreach (var item in atom.Feed.Items
+                .OrderByDescending(item => item.LastUpdatedTime)
+                .AsParallel())
             {
                 // get the name, etc
                 var name = string.Join(" & ", item.Authors.Select(author => author.Name));
