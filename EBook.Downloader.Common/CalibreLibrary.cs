@@ -147,17 +147,10 @@ namespace EBook.Downloader.Common
             this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier;
             this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = extension?.TrimStart('.').ToUpperInvariant() ?? "EPUB";
 
-            using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
-            {
-                if (await reader.ReadAsync().ConfigureAwait(false))
-                {
-                    return new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
-                }
-                else
-                {
-                    return default;
-                }
-            }
+            using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
+            return await reader.ReadAsync().ConfigureAwait(false)
+                ? new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3))
+                : default;
         }
 
         /// <summary>
@@ -233,6 +226,11 @@ namespace EBook.Downloader.Common
                         System.IO.File.Delete(coverFile);
                     }
 
+                    using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
+                    if (await reader.ReadAsync().ConfigureAwait(false))
+                    {
+                        book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                    }
                 }
                 else if (book.Id != default && info.Path != null)
                 {
@@ -287,7 +285,7 @@ namespace EBook.Downloader.Common
         /// <param name="lastModified">The last modified date.</param>
         /// <param name="longDescription">The long description.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModifiedAndDescriptionAsync(CalibreBook book, System.DateTime lastModified, System.Xml.XmlElement? longDescription) => this.UpdateLastModifiedAndDescriptionAsync(book.Id, book.Name, lastModified, book.LastModified, longDescription);
+        public Task UpdateLastModifiedAndDescriptionAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription) => this.UpdateLastModifiedAndDescriptionAsync(book.Id, book.Name, lastModified, book.LastModified, longDescription ?? default);
 
         /// <summary>
         /// Disposes this instance.
@@ -369,9 +367,9 @@ namespace EBook.Downloader.Common
             return sha.ComputeHash(stream);
         }
 
-        private Task UpdateLastModifiedAsync(int id, string name, string path, System.DateTime lastModified, System.Xml.XmlElement? longDescription) => this.UpdateLastModifiedAndDescriptionAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, longDescription);
+        private Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified, System.Xml.XmlElement? longDescription) => this.UpdateLastModifiedAndDescriptionAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, longDescription);
 
-        private async Task UpdateLastModifiedAndDescriptionAsync(int id, string name, System.DateTime fileLastModified, System.DateTime lastModified, System.Xml.XmlElement? longDescription)
+        private async Task UpdateLastModifiedAndDescriptionAsync(int id, string name, DateTime fileLastModified, System.DateTime lastModified, System.Xml.XmlElement? longDescription)
         {
             var descriptionChanged = false;
             if (!(longDescription is null))

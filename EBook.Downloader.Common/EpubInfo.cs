@@ -158,7 +158,7 @@ namespace EBook.Downloader.Common
 
             var identifiers = new System.Collections.Generic.Dictionary<string, string>();
             var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
-            if (!(identifier is null))
+            if (identifier != null)
             {
                 var split = identifier.InnerText.Split(new[] { ':' }, 2);
                 identifiers.Add(split[0], split[1]);
@@ -168,7 +168,7 @@ namespace EBook.Downloader.Common
 
             System.Xml.XmlElement? longDescription = default;
             var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
-            if (node != null && node.InnerText != null)
+            if (node?.InnerText != null)
             {
                 longDescription = document.CreateElement("div");
                 longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
