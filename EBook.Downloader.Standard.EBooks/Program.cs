@@ -36,8 +36,8 @@ namespace EBook.Downloader.Standard.EBooks
         {
             var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool>(Process) })
                 .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
-                .AddOption(new Option(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(System.Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } })
-                .AddOption(new Option(new[] { "-c", "--check-description" }, "Whether to check the description") { Argument = new Argument<bool> { Arity = ArgumentArity.ZeroOrOne } })
+                .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
+                .AddOption(new Option<bool>(new[] { "-c", "--check-description" }, "Whether to check the description"))
                 .UseHost(
                     Host.CreateDefaultBuilder,
                     configureHost =>
