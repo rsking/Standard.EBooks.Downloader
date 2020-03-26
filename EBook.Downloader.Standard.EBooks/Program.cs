@@ -87,12 +87,34 @@ namespace EBook.Downloader.Standard.EBooks
                 atom.ReadFrom(xml);
             }
 
+            var sentinelPath = System.IO.Path.Combine(calibreLibraryPath.FullName, ".sentinel");
+
+            void UpdateSentinelDateTime(DateTime dateTime)
+            {
+                var fileInfo = new System.IO.FileInfo(sentinelPath);
+                if (fileInfo.LastWriteTimeUtc < dateTime)
+                {
+                    fileInfo.LastWriteTimeUtc = dateTime;
+                }
+            }
+
+            if (!System.IO.File.Exists(sentinelPath))
+            {
+                System.IO.File.WriteAllBytes(sentinelPath, Array.Empty<byte>());
+                UpdateSentinelDateTime(DateTime.MinValue.ToUniversalTime());
+            }
+
+            var sentinelDateTime = System.IO.File.GetLastWriteTimeUtc(sentinelPath);
+
             var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
             foreach (var item in atom.Feed.Items
-                .OrderByDescending(item => item.LastUpdatedTime)
+                .OrderBy(item => item.LastUpdatedTime)
+                .Where(item => item.LastUpdatedTime > sentinelDateTime)
                 .AsParallel())
             {
+                UpdateSentinelDateTime(item.LastUpdatedTime.UtcDateTime);
+
                 // get the name, etc
                 var name = string.Join(" & ", item.Authors.Select(author => author.Name));
                 programLogger.LogInformation("Processing book {Name} - {Title}", name, item.Title.Text);
