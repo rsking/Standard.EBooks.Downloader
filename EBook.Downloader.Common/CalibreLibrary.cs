@@ -375,6 +375,7 @@ namespace EBook.Downloader.Common
             if (description != longDescription.OuterXml)
             {
                 // execute calibredb to update the description
+                this.logger.LogInformation("Updating description to the long desctiption");
                 this.ExecuteCalibreDb("set_metadata", $"{id} --field comments:\"{longDescription.OuterXml}\"");
             }
         }
