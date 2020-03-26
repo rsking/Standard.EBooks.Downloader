@@ -81,15 +81,13 @@ namespace EBook.Downloader.Standard.EBooks
                 }
             };
 
-            System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.SystemDefault | System.Net.SecurityProtocolType.Tls12;
-            var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
-
             var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
             using (var xml = System.Xml.XmlReader.Create(Uri.ToString()))
             {
                 atom.ReadFrom(xml);
             }
 
+            var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
             foreach (var item in atom.Feed.Items
                 .OrderByDescending(item => item.LastUpdatedTime)
