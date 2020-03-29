@@ -34,10 +34,11 @@ namespace EBook.Downloader.Standard.EBooks
         /// <returns>The main application task.</returns>
         private static Task Main(string[] args)
         {
-            var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool>(Process) })
+            var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool>(Process) })
                 .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
                 .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
                 .AddOption(new Option<bool>(new[] { "-c", "--check-description" }, "Whether to check the description"))
+                .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
                 .UseHost(
                     Host.CreateDefaultBuilder,
                     configureHost =>
@@ -63,7 +64,8 @@ namespace EBook.Downloader.Standard.EBooks
             IHost host,
             System.IO.DirectoryInfo calibreLibraryPath,
             System.IO.DirectoryInfo outputPath,
-            bool checkDescription)
+            bool checkDescription,
+            bool resync)
         {
             var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -95,7 +97,9 @@ namespace EBook.Downloader.Standard.EBooks
                 System.IO.File.SetLastWriteTimeUtc(sentinelPath, DateTime.MinValue.ToUniversalTime());
             }
 
-            var sentinelDateTime = System.IO.File.GetLastWriteTimeUtc(sentinelPath);
+            var sentinelDateTime = resync
+                ? DateTime.MinValue.ToUniversalTime()
+                : System.IO.File.GetLastWriteTimeUtc(sentinelPath);
 
             var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
