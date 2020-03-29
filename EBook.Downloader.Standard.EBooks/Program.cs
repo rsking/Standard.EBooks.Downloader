@@ -89,19 +89,10 @@ namespace EBook.Downloader.Standard.EBooks
 
             var sentinelPath = System.IO.Path.Combine(calibreLibraryPath.FullName, ".sentinel");
 
-            void UpdateSentinelDateTime(DateTime dateTime)
-            {
-                var fileInfo = new System.IO.FileInfo(sentinelPath);
-                if (fileInfo.LastWriteTimeUtc < dateTime)
-                {
-                    fileInfo.LastWriteTimeUtc = dateTime;
-                }
-            }
-
             if (!System.IO.File.Exists(sentinelPath))
             {
                 System.IO.File.WriteAllBytes(sentinelPath, Array.Empty<byte>());
-                UpdateSentinelDateTime(DateTime.MinValue.ToUniversalTime());
+                System.IO.File.SetLastWriteTimeUtc(sentinelPath, DateTime.MinValue.ToUniversalTime());
             }
 
             var sentinelDateTime = System.IO.File.GetLastWriteTimeUtc(sentinelPath);
@@ -113,7 +104,8 @@ namespace EBook.Downloader.Standard.EBooks
                 .Where(item => item.LastUpdatedTime > sentinelDateTime)
                 .AsParallel())
             {
-                UpdateSentinelDateTime(item.LastUpdatedTime.UtcDateTime);
+                // update the sentinel time
+                System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
 
                 // get the name, etc
                 var name = string.Join(" & ", item.Authors.Select(author => author.Name));
