@@ -108,9 +108,6 @@ namespace EBook.Downloader.Standard.EBooks
                 .Where(item => item.LastUpdatedTime > sentinelDateTime)
                 .AsParallel())
             {
-                // update the sentinel time
-                System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
-
                 // get the name, etc
                 var name = string.Join(" & ", item.Authors.Select(author => author.Name));
                 programLogger.LogInformation("Processing book {Name} - {Title}", name, item.Title.Text);
@@ -156,6 +153,9 @@ namespace EBook.Downloader.Standard.EBooks
                         System.IO.File.Delete(epubInfo.Path);
                     }
                 }
+
+                // update the sentinel time
+                System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
             }
         }
 
