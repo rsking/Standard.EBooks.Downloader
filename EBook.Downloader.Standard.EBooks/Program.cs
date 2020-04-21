@@ -110,8 +110,8 @@ namespace EBook.Downloader.Standard.EBooks
             {
                 // get the name, etc
                 var name = string.Join(" & ", item.Authors.Select(author => author.Name));
-                programLogger.LogInformation("Processing book {Name} - {Title}", name, item.Title.Text);
-                using var bookScope = programLogger.BeginScope("{Name} - {Title}", name, item.Title.Text);
+                programLogger.LogInformation("Processing book {Title} - {Name}", item.Title.Text, name);
+                using var bookScope = programLogger.BeginScope("{Title} - {Name}", item.Title.Text, name);
                 foreach (var uri in item.Links
                     .Where(link => (link.MediaType == "application/epub+zip" && link.Uri.OriginalString.EndsWith("epub3", System.StringComparison.InvariantCultureIgnoreCase)) || link.MediaType == "application/kepub+zip")
                     .Select(link => link.Uri.IsAbsoluteUri ? link.Uri : new Uri(Uri, link.Uri.OriginalString)))
