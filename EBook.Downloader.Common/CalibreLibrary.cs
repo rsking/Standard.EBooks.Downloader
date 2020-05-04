@@ -371,8 +371,9 @@ namespace EBook.Downloader.Common
             }
 
             this.selectDescriptionCommand.Parameters[":id"].Value = id;
-            var description = await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string;
-            if (description != longDescription.OuterXml)
+            var htmlDocument = new HtmlAgilityPack.HtmlDocument();
+            htmlDocument.LoadHtml(await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string);
+            if (htmlDocument.DocumentNode.OuterHtml != longDescription.OuterXml)
             {
                 // execute calibredb to update the description
                 this.logger.LogInformation("Updating description to the long desctiption");
