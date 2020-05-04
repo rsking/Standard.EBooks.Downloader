@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -25,6 +25,8 @@ namespace EBook.Downloader.Standard.EBooks
     /// </summary>
     internal class Program
     {
+        private const int SentinelRetryCount = 3;
+
         private static readonly Uri Uri = new UriBuilder("https://standardebooks.org/opds/all").Uri;
 
         /// <summary>
@@ -101,6 +103,7 @@ namespace EBook.Downloader.Standard.EBooks
                 ? DateTime.MinValue.ToUniversalTime()
                 : System.IO.File.GetLastWriteTimeUtc(sentinelPath);
 
+            var sentinelLock = new object();
             var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
             foreach (var item in atom.Feed.Items
@@ -154,8 +157,23 @@ namespace EBook.Downloader.Standard.EBooks
                     }
                 }
 
-                // update the sentinel time
-                System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
+                lock (sentinelLock)
+                {
+                    // update the sentinel time
+                    for (var i = 1; i <= SentinelRetryCount; i++)
+                    {
+                        try
+                        {
+                            System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
+                            break;
+                        }
+                        catch (System.IO.IOException) when (i != SentinelRetryCount)
+                        {
+                        }
+
+                        System.Threading.Thread.Sleep(1000);
+                    }
+                }
             }
         }
 
