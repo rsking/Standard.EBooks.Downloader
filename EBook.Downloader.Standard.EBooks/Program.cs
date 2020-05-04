@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -141,6 +141,10 @@ namespace EBook.Downloader.Standard.EBooks
                             }
                         }
                     }
+                    else
+                    {
+                        programLogger.LogInformation("{Title} - {Name} does not exist in Calibre", item.Title.Text, name);
+                    }
 
                     // download this
                     var path = await DownloadBookAsync(uri, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
@@ -184,7 +188,7 @@ namespace EBook.Downloader.Standard.EBooks
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
             if (!System.IO.File.Exists(fullPath))
             {
-                logger.LogInformation("\tDownloading book {0}", fileName);
+                logger.LogInformation("Downloading book {0}", fileName);
                 await uri.DownloadAsFileAsync(fullPath, false, httpClientFactory).ConfigureAwait(false);
             }
 
