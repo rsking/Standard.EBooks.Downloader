@@ -125,6 +125,7 @@ namespace EBook.Downloader.Standard.EBooks
                 {
                     // get the date time
                     var extension = uri.GetExtension();
+                    var kepub = string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
                     var book = await calibreLibrary.GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension).ConfigureAwait(false);
                     if (book.Id != default)
                     {
@@ -133,8 +134,8 @@ namespace EBook.Downloader.Standard.EBooks
 
                         if (System.IO.File.Exists(filePath))
                         {
-                            var longDescription = checkDescription
-                                ? EpubInfo.Parse(filePath).LongDescription
+                            var longDescription = checkDescription && !kepub
+                                ? EpubInfo.Parse(filePath, true).LongDescription
                                 : default;
 
                             var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
@@ -157,7 +158,7 @@ namespace EBook.Downloader.Standard.EBooks
                         continue;
                     }
 
-                    var epubInfo = EpubInfo.Parse(path);
+                    var epubInfo = EpubInfo.Parse(path, !kepub);
                     if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset).ConfigureAwait(false))
                     {
                         programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);

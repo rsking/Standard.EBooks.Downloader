@@ -89,8 +89,9 @@ namespace EBook.Downloader.Common
         /// Parses EPUB information from a path.
         /// </summary>
         /// <param name="path">The path.</param>
+        /// <param name="parseDescription">Set to <see langword="true" /> to parse the description.</param>
         /// <returns>The EPUB information.</returns>
-        public static EpubInfo Parse(string path)
+        public static EpubInfo Parse(string path, bool parseDescription)
         {
             string GetContents()
             {
@@ -164,14 +165,17 @@ namespace EBook.Downloader.Common
                 identifiers.Add(split[0], split[1]);
             }
 
-            var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
-
+            string? description = default;
             System.Xml.XmlElement? longDescription = default;
-            var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
-            if (node?.InnerText != null)
+            if (parseDescription)
             {
-                longDescription = document.CreateElement("div");
-                longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
+                description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
+                var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
+                if (node?.InnerText != null)
+                {
+                    longDescription = document.CreateElement("div");
+                    longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
+                }
             }
 
             return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, System.IO.Path.GetExtension(path).TrimStart('.'), path);
