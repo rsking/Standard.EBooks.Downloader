@@ -365,6 +365,18 @@ namespace EBook.Downloader.Common
             return sha.ComputeHash(stream);
         }
 
+        private static string? SanitiseHtml(string? html)
+        {
+            if (html is null)
+            {
+                return null;
+            }
+
+            var htmlDocument = new HtmlAgilityPack.HtmlDocument();
+            htmlDocument.LoadHtml(html);
+            return htmlDocument.DocumentNode.OuterHtml;
+        }
+
         private async Task UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription)
         {
             if (longDescription is null)
@@ -373,13 +385,13 @@ namespace EBook.Downloader.Common
             }
 
             this.selectDescriptionCommand.Parameters[":id"].Value = id;
-            var htmlDocument = new HtmlAgilityPack.HtmlDocument();
-            htmlDocument.LoadHtml(await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string);
-            if (htmlDocument.DocumentNode.OuterHtml != longDescription.OuterXml)
+            var currentDescription = SanitiseHtml(await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string);
+            var newDescription = SanitiseHtml(longDescription.OuterXml);
+            if (currentDescription != newDescription)
             {
                 // execute calibredb to update the description
                 this.logger.LogInformation("Updating description to the long desctiption");
-                this.ExecuteCalibreDb("set_metadata", $"{id} --field comments:\"{longDescription.OuterXml}\"");
+                this.ExecuteCalibreDb("set_metadata", $"{id} --field comments:\"{newDescription}\"");
             }
         }
 
