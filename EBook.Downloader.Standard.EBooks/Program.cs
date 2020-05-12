@@ -29,6 +29,8 @@ namespace EBook.Downloader.Standard.EBooks
 
         private static readonly Uri Uri = new UriBuilder("https://standardebooks.org/opds/all").Uri;
 
+        private const int MaxTimeOffset = 180;
+
         /// <summary>
         /// The main entry point.
         /// </summary>
@@ -36,11 +38,12 @@ namespace EBook.Downloader.Standard.EBooks
         /// <returns>The main application task.</returns>
         private static Task Main(string[] args)
         {
-            var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool>(Process) })
+            var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int>(Process) })
                 .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
                 .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
                 .AddOption(new Option<bool>(new[] { "-c", "--check-description" }, "Whether to check the description"))
                 .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
+                .AddOption(new Option<int>(new[] { "-m", "--max-time-offiet"}, () => MaxTimeOffset, "The maximum time offset"))
                 .UseHost(
                     Host.CreateDefaultBuilder,
                     configureHost =>
@@ -66,8 +69,9 @@ namespace EBook.Downloader.Standard.EBooks
             IHost host,
             System.IO.DirectoryInfo calibreLibraryPath,
             System.IO.DirectoryInfo outputPath,
-            bool checkDescription,
-            bool resync)
+            bool checkDescription = false,
+            bool resync = false,
+            int maxTimeOffset = MaxTimeOffset)
         {
             var programLogger = host.Services.GetRequiredService<ILogger<Program>>();
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -134,7 +138,7 @@ namespace EBook.Downloader.Standard.EBooks
                                 : default;
 
                             var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
-                            await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription).ConfigureAwait(false);
+                            await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
                             if (!await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory).ConfigureAwait(false))
                             {
                                 continue;
@@ -154,7 +158,7 @@ namespace EBook.Downloader.Standard.EBooks
                     }
 
                     var epubInfo = EpubInfo.Parse(path);
-                    if (await calibreLibrary.AddOrUpdateAsync(epubInfo).ConfigureAwait(false))
+                    if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset).ConfigureAwait(false))
                     {
                         programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
                         System.IO.File.Delete(epubInfo.Path);

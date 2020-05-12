@@ -148,8 +148,9 @@ namespace EBook.Downloader.Common
         /// Adds a new book, or updates the book if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
+        /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
-        public async Task<bool> AddOrUpdateAsync(EpubInfo info)
+        public async Task<bool> AddOrUpdateAsync(EpubInfo info, int maxTimeOffset)
         {
             CalibreBook book = default;
 
@@ -233,7 +234,7 @@ namespace EBook.Downloader.Common
                 {
                     this.UpdateLastWriteTime(book.Path, book.Name, info);
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                 }
 
                 return true;
@@ -263,7 +264,7 @@ namespace EBook.Downloader.Common
                     }
 
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
             }
@@ -277,11 +278,12 @@ namespace EBook.Downloader.Common
         /// <param name="book">The book.</param>
         /// <param name="lastModified">The last modified date.</param>
         /// <param name="longDescription">The long description.</param>
+        /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <returns>The task associated with this function.</returns>
-        public async Task UpdateLastModifiedAndDescriptionAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription)
+        public async Task UpdateLastModifiedAndDescriptionAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, int maxTimeOffset)
         {
             await this.UpdateDescriptionAsync(book.Id, longDescription).ConfigureAwait(false);
-            await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified).ConfigureAwait(false);
+            await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -381,9 +383,9 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified);
+        private Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified, int maxTimeOffset) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, maxTimeOffset);
 
-        private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified)
+        private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset)
         {
             if (fileLastModified == lastModified)
             {
@@ -392,7 +394,7 @@ namespace EBook.Downloader.Common
 
             // check this as date time, to be within the same five minutes, and is the latest date/time
             var difference = fileLastModified - lastModified;
-            if (Math.Abs(difference.TotalMinutes) > 5D || difference.TotalMinutes > 0)
+            if (Math.Abs(difference.TotalMinutes) > maxTimeOffset || difference.TotalMinutes > 0)
             {
                 // write this to the database
                 this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModified.ToUniversalTime(), fileLastModified);
