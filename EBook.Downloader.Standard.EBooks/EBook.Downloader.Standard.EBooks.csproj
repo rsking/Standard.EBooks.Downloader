@@ -10,7 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(DotNetVersion)" />
     <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
-    <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20214.1" />
+    <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20253.1" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="4.7.0" />
   </ItemGroup>
 
