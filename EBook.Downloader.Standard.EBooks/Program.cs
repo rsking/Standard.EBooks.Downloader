@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -25,11 +25,13 @@ namespace EBook.Downloader.Standard.EBooks
     /// </summary>
     internal class Program
     {
-        private const int SentinelRetryCount = 3;
+        private const int SentinelRetryCount = 30;
 
-        private static readonly Uri Uri = new UriBuilder("https://standardebooks.org/opds/all").Uri;
+        private const int SentinelRetryWait = 100;
 
         private const int MaxTimeOffset = 180;
+
+        private static readonly Uri Uri = new UriBuilder("https://standardebooks.org/opds/all").Uri;
 
         /// <summary>
         /// The main entry point.
@@ -180,7 +182,7 @@ namespace EBook.Downloader.Standard.EBooks
                         {
                         }
 
-                        System.Threading.Thread.Sleep(1000);
+                        System.Threading.Thread.Sleep(SentinelRetryWait);
                     }
                 }
             }
