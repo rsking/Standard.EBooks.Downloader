@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -45,7 +45,7 @@ namespace EBook.Downloader.Standard.EBooks
                 .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
                 .AddOption(new Option<bool>(new[] { "-c", "--check-description" }, "Whether to check the description"))
                 .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
-                .AddOption(new Option<int>(new[] { "-m", "--max-time-offiet"}, () => MaxTimeOffset, "The maximum time offset"))
+                .AddOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
                 .UseHost(
                     Host.CreateDefaultBuilder,
                     configureHost =>
