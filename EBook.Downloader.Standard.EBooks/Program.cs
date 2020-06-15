@@ -188,7 +188,7 @@ namespace EBook.Downloader.Standard.EBooks
             }
         }
 
-        private static async Task<string> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
+        private static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
         {
             // create the file name
             var fileName = uri.GetFileName();
@@ -196,7 +196,15 @@ namespace EBook.Downloader.Standard.EBooks
             if (!System.IO.File.Exists(fullPath))
             {
                 logger.LogInformation("Downloading book {0}", fileName);
-                await uri.DownloadAsFileAsync(fullPath, false, httpClientFactory).ConfigureAwait(false);
+                try
+                {
+                    await uri.DownloadAsFileAsync(fullPath, false, httpClientFactory).ConfigureAwait(false);
+                }
+                catch (System.Net.Http.HttpRequestException ex)
+                {
+                    logger.LogError(ex, ex.Message);
+                    return default;
+                }
             }
 
             return fullPath;
