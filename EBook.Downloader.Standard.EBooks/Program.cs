@@ -84,6 +84,7 @@ namespace EBook.Downloader.Standard.EBooks
                         programLogger.LogError(exception, exception.Message);
                         break;
                     case null:
+                        programLogger.LogError("Unhandled Exception");
                         break;
                     default:
                         programLogger.LogError(e.ExceptionObject.ToString());
@@ -142,7 +143,13 @@ namespace EBook.Downloader.Standard.EBooks
 
                             var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
                             await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
-                            if (!await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory).ConfigureAwait(false))
+                            var shouldDownload = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory).ConfigureAwait(false);
+                            if (!shouldDownload.HasValue)
+                            {
+                                programLogger.LogError("Invalid response from {uri}", uri);
+                                continue;
+                            }
+                            else if (!shouldDownload.Value)
                             {
                                 continue;
                             }

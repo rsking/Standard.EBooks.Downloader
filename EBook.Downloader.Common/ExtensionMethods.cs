@@ -22,7 +22,7 @@ namespace EBook.Downloader.Common
         /// <param name="dateTime">The last modified date time.</param>
         /// <param name="clientFactory">The client factory.</param>
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
-        public static async Task<bool> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = null)
+        public static async Task<bool?> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = null)
         {
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
@@ -31,21 +31,18 @@ namespace EBook.Downloader.Common
                 ? new HttpClient(handler)
                 : clientFactory.CreateClient("header");
 
-            System.DateTimeOffset? lastModified = null;
             using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
             {
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
-                    return false;
+                    return null;
                 }
 
-                lastModified = response.Content.Headers.LastModified;
+                var lastModified =  response.Content.Headers.LastModified;
+                return !lastModified.HasValue
+                    || System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D;
             }
-
-            handler?.Dispose();
-
-            return !lastModified.HasValue || System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D;
         }
 
         /// <summary>
