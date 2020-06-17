@@ -130,6 +130,7 @@ namespace EBook.Downloader.Standard.EBooks
                     var extension = uri.GetExtension();
                     var kepub = string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
                     var book = await calibreLibrary.GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension).ConfigureAwait(false);
+                    var lastWriteTimeUtc = DateTime.MinValue;
                     if (book.Id != default)
                     {
                         // see if we should update the date time
@@ -141,18 +142,8 @@ namespace EBook.Downloader.Standard.EBooks
                                 ? EpubInfo.Parse(filePath, true).LongDescription
                                 : default;
 
-                            var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
+                            lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
                             await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
-                            var shouldDownload = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory).ConfigureAwait(false);
-                            if (!shouldDownload.HasValue)
-                            {
-                                programLogger.LogError("Invalid response from {uri}", uri);
-                                continue;
-                            }
-                            else if (!shouldDownload.Value)
-                            {
-                                continue;
-                            }
                         }
                     }
                     else
@@ -160,8 +151,48 @@ namespace EBook.Downloader.Standard.EBooks
                         programLogger.LogInformation("{Title} - {Name} does not exist in Calibre", item.Title.Text, name);
                     }
 
+                    var (shouldDownload, actualUri) = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory, url =>
+                    {
+                        var uriString = url.ToString();
+                        var fileName = GetFileNameWithoutExtension(uriString);
+                        var extension = GetExtension(uriString);
+                        var baseUri = uriString.Substring(0, uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1);
+
+                        var split = fileName.Split('_');
+                        var number = Math.Max(split.Length - 1, 2);
+                        fileName = string.Join('_', split.Take(number));
+                        return new Uri(baseUri + fileName + extension);
+
+                        static string GetFileNameWithoutExtension(string path)
+                        {
+                            var fileName = GetFileName(path);
+                            return fileName.Substring(0, fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase));
+                        }
+
+                        static string GetExtension(string path)
+                        {
+                            var fileName = GetFileName(path);
+                            return fileName.Substring(fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase));
+                        }
+
+                        static string GetFileName(string path)
+                        {
+                            return path.Substring(path.LastIndexOf('/') + 1);
+                        }
+                    }).ConfigureAwait(false);
+
+                    if (actualUri is null)
+                    {
+                        programLogger.LogError("Invalid response from {uri}", uri);
+                        continue;
+                    }
+                    else if (!shouldDownload)
+                    {
+                        continue;
+                    }
+
                     // download this
-                    var path = await DownloadBookAsync(uri, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
+                    var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
                     if (path is null)
                     {
                         continue;

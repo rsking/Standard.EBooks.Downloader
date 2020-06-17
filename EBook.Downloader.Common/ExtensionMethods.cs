@@ -21,8 +21,9 @@ namespace EBook.Downloader.Common
         /// <param name="uri">The uri to check.</param>
         /// <param name="dateTime">The last modified date time.</param>
         /// <param name="clientFactory">The client factory.</param>
+        /// <param name="modifier">The URI modifier.</param>
         /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
-        public static async Task<bool?> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = null)
+        public static async Task<(bool download, System.Uri uri)> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = default, System.Func<System.Uri, System.Uri> modifier = default)
         {
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
@@ -31,17 +32,35 @@ namespace EBook.Downloader.Common
                 ? new HttpClient(handler)
                 : clientFactory.CreateClient("header");
 
-            using (var request = new HttpRequestMessage(HttpMethod.Head, uri))
+            var lastModified = await GetDateTimeOffset(uri, client).ConfigureAwait(false);
+            if (!lastModified.HasValue && modifier != null)
             {
+                System.Uri updated;
+                while ((updated = modifier(uri)) != uri)
+                {
+                    uri = updated;
+                    lastModified = await GetDateTimeOffset(updated, client).ConfigureAwait(false);
+                    if (lastModified.HasValue)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            return lastModified.HasValue
+                ? (System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D, uri)
+                : default((bool, System.Uri));
+
+            static async Task<System.DateTimeOffset?> GetDateTimeOffset(System.Uri uri, HttpClient client)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Head, uri);
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
                     return null;
                 }
 
-                var lastModified =  response.Content.Headers.LastModified;
-                return !lastModified.HasValue
-                    || System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D;
+                return response.Content.Headers.LastModified;
             }
         }
 
