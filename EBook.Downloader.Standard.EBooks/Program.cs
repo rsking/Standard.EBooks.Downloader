@@ -64,7 +64,7 @@ namespace EBook.Downloader.Standard.EBooks
                                 .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }));
                     });
 
-            return builder.Build().InvokeAsync(args.Select(arg => Environment.ExpandEnvironmentVariables(arg)).ToArray());
+            return builder.Build().InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray());
         }
 
         private static async Task Process(

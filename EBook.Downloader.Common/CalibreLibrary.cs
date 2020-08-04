@@ -451,7 +451,7 @@ namespace EBook.Downloader.Common
                 RedirectStandardError = true,
             };
 
-            using var process = new System.Diagnostics.Process() { StartInfo = processStartInfo };
+            using var process = new System.Diagnostics.Process { StartInfo = processStartInfo };
 
             void DefaultOutputDataReceived(object sender, System.Diagnostics.DataReceivedEventArgs args)
             {
