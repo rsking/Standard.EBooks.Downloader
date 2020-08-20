@@ -122,16 +122,17 @@ static async Task Process(
             var lastWriteTimeUtc = DateTime.MinValue;
             if (book is not null)
             {
-                if (!kepub)
+                var filePath = book.GetFullPath(calibreLibrary.Path, extension);
+                if (System.IO.File.Exists(filePath))
                 {
-                    // see if we should update the date time
-                    var filePath = book.GetFullPath(calibreLibrary.Path, extension);
+                    var longDescription = checkDescription ? EpubInfo.Parse(filePath, true).LongDescription : default;
 
-                    if (System.IO.File.Exists(filePath))
+                    lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
+
+                    // Only update the description/last modified from the EPUB
+                    if (!kepub)
                     {
-                        var longDescription = checkDescription ? EpubInfo.Parse(filePath, true).LongDescription : default;
-
-                        lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
+                        // see if we should update the date time
                         await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
                     }
                 }

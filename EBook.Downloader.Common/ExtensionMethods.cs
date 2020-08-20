@@ -38,8 +38,7 @@ namespace EBook.Downloader.Common
                 System.Uri updated;
                 while ((updated = modifier(uri)) != uri)
                 {
-                    uri = updated;
-                    lastModified = await GetDateTimeOffset(updated, client).ConfigureAwait(false);
+                    lastModified = await GetDateTimeOffset(uri = updated, client).ConfigureAwait(false);
                     if (lastModified.HasValue)
                     {
                         break;
