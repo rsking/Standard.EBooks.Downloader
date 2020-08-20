@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
-    <DotNetVersion>3.1.6</DotNetVersion>
+    <DotNetVersion>3.1.7</DotNetVersion>
   </PropertyGroup>
 
   <ItemGroup>

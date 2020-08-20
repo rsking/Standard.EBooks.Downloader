@@ -126,7 +126,7 @@ namespace EBook.Downloader.Common
         /// <param name="type">The type of identifier.</param>
         /// <param name="extension">The extension to check.</param>
         /// <returns>The book.</returns>
-        public async Task<CalibreBook> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension)
+        public async Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension)
         {
             if (identifier is null)
             {
@@ -152,7 +152,13 @@ namespace EBook.Downloader.Common
         /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
         public async Task<bool> AddOrUpdateAsync(EpubInfo info, int maxTimeOffset)
         {
-            CalibreBook book = default;
+            if (info is null)
+            {
+                throw new ArgumentNullException(nameof(info));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+            CalibreBook? book = default;
 
             var identifier = info.Identifiers.First();
             this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = identifier.Key;
@@ -167,7 +173,7 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            if (book.Id == default || book.Path is null || book.Name is null)
+            if (book is null)
             {
                 // see if we need to add the book or add the format
                 this.selectBookByIdentifierCommand.Parameters[":type"].Value = identifier.Key;
@@ -181,7 +187,7 @@ namespace EBook.Downloader.Common
                     }
                 }
 
-                if (book.Id == default)
+                if (book is null)
                 {
                     // add this book
                     var coverFile = default(string);
@@ -191,7 +197,7 @@ namespace EBook.Downloader.Common
                     using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path))
                     {
                         var coverEntry = zipFile.Entries.FirstOrDefault(entry => entry.Name == "cover.svg");
-                        if (coverEntry != null)
+                        if (coverEntry is not null)
                         {
                             coverFile = System.IO.Path.GetTempFileName();
                             using var zipStream = coverEntry.Open();
@@ -224,17 +230,17 @@ namespace EBook.Downloader.Common
                         book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
                     }
                 }
-                else if (book.Id != default && info.Path != null)
+                else if (info.Path is not null)
                 {
                     // add this format
                     this.ExecuteCalibreDb("add_format", "--dont-replace " + book.Id + " \"" + info.Path + "\"");
                 }
 
-                if (book.Path != null && book.Name != null && info.Path != null)
+                if (book is not null && book.Path is not null && book.Name is not null && info.Path is not null)
                 {
-                    this.UpdateLastWriteTime(book.Path, book.Name, info);
+                    UpdateLastWriteTime(book.Path, book.Name, info);
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                    await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                 }
 
                 return true;
@@ -264,12 +270,74 @@ namespace EBook.Downloader.Common
                     }
 
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                    await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
             }
 
             return false;
+
+            static bool CheckFiles(string source, string destination, ILogger logger)
+            {
+                var sourceFileInfo = new System.IO.FileInfo(source);
+                var destinationFileInfo = new System.IO.FileInfo(destination);
+
+                if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
+                {
+                    logger.LogDebug("source and destination have different modified dates");
+                    return false;
+                }
+
+                if (sourceFileInfo.Length != destinationFileInfo.Length)
+                {
+                    logger.LogDebug("source and destination are different lengths");
+                    return false;
+                }
+
+                var sourceHash = GetFileHash(sourceFileInfo.FullName);
+                var destinationHash = GetFileHash(destinationFileInfo.FullName);
+
+                if (sourceHash.Length != destinationHash.Length)
+                {
+                    logger.LogDebug("source and destination hashes are different lengths");
+                    return false;
+                }
+
+                for (var i = 0; i < sourceHash.Length; i++)
+                {
+                    if (sourceHash[i] != destinationHash[i])
+                    {
+                        logger.LogDebug("source and destination hashes do not match");
+                        return false;
+                    }
+                }
+
+                return true;
+
+                static byte[] GetFileHash(string fileName)
+                {
+                    using var sha = System.Security.Cryptography.SHA256.Create();
+                    using var stream = System.IO.File.OpenRead(fileName);
+                    return sha.ComputeHash(stream);
+                }
+            }
+
+            Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified, int maxTimeOffset)
+            {
+                return this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, maxTimeOffset);
+            }
+
+            void UpdateLastWriteTime(string path, string name, EpubInfo info)
+            {
+                var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
+                if (System.IO.File.Exists(fullPath))
+                {
+                    var fileSystemInfo = new System.IO.FileInfo(info.Path);
+                    var dateTime = fileSystemInfo.LastWriteTime;
+
+                    _ = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
+                }
+            }
         }
 
         /// <summary>
@@ -282,6 +350,12 @@ namespace EBook.Downloader.Common
         /// <returns>The task associated with this function.</returns>
         public async Task UpdateLastModifiedAndDescriptionAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, int maxTimeOffset)
         {
+            if (book is null)
+            {
+                throw new System.ArgumentNullException(nameof(book));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
             await this.UpdateDescriptionAsync(book.Id, longDescription).ConfigureAwait(false);
             await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset).ConfigureAwait(false);
         }
@@ -320,63 +394,6 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private static bool CheckFiles(string source, string destination, ILogger logger)
-        {
-            var sourceFileInfo = new System.IO.FileInfo(source);
-            var destinationFileInfo = new System.IO.FileInfo(destination);
-
-            if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
-            {
-                logger.LogDebug("source and destination have different modified dates");
-                return false;
-            }
-
-            if (sourceFileInfo.Length != destinationFileInfo.Length)
-            {
-                logger.LogDebug("source and destination are different lengths");
-                return false;
-            }
-
-            var sourceHash = GetFileHash(sourceFileInfo.FullName);
-            var destinationHash = GetFileHash(destinationFileInfo.FullName);
-
-            if (sourceHash.Length != destinationHash.Length)
-            {
-                logger.LogDebug("source and destination hashes are different lengths");
-                return false;
-            }
-
-            for (var i = 0; i < sourceHash.Length; i++)
-            {
-                if (sourceHash[i] != destinationHash[i])
-                {
-                    logger.LogDebug("source and destination hashes do not match");
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private static byte[] GetFileHash(string fileName)
-        {
-            using var sha = System.Security.Cryptography.SHA256.Create();
-            using var stream = System.IO.File.OpenRead(fileName);
-            return sha.ComputeHash(stream);
-        }
-
-        private static string? SanitiseHtml(string? html)
-        {
-            if (html is null)
-            {
-                return null;
-            }
-
-            var htmlDocument = new HtmlAgilityPack.HtmlDocument();
-            htmlDocument.LoadHtml(html);
-            return htmlDocument.DocumentNode.OuterHtml;
-        }
-
         private async Task UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription)
         {
             if (longDescription is null)
@@ -393,9 +410,19 @@ namespace EBook.Downloader.Common
                 this.logger.LogInformation("Updating description to the long desctiption");
                 this.ExecuteCalibreDb("set_metadata", $"{id} --field comments:\"{newDescription}\"");
             }
-        }
 
-        private Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified, int maxTimeOffset) => this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, maxTimeOffset);
+            static string? SanitiseHtml(string? html)
+            {
+                if (html is null)
+                {
+                    return null;
+                }
+
+                var htmlDocument = new HtmlAgilityPack.HtmlDocument();
+                htmlDocument.LoadHtml(html);
+                return htmlDocument.DocumentNode.OuterHtml;
+            }
+        }
 
         private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset)
         {
@@ -413,29 +440,17 @@ namespace EBook.Downloader.Common
                 this.updateLastModifiedCommand.Parameters[":lastModified"].Value = fileLastModified.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
                 this.updateLastModifiedCommand.Parameters[":id"].Value = id;
 
-                if (this.dropTriggerCommand != null)
+                if (this.dropTriggerCommand is not null)
                 {
                     await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                 }
 
                 await this.updateLastModifiedCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
 
-                if (this.createTriggerCommand != null)
+                if (this.createTriggerCommand is not null)
                 {
                     await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
                 }
-            }
-        }
-
-        private void UpdateLastWriteTime(string path, string name, EpubInfo info)
-        {
-            var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
-            if (System.IO.File.Exists(fullPath))
-            {
-                var fileSystemInfo = new System.IO.FileInfo(info.Path);
-                var dateTime = fileSystemInfo.LastWriteTime;
-
-                _ = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
             }
         }
 

@@ -11,7 +11,7 @@ namespace EBook.Downloader.Common
     /// <summary>
     /// EPUB information.
     /// </summary>
-    public readonly struct EpubInfo : System.IEquatable<EpubInfo>
+    public record EpubInfo
     {
         private EpubInfo(
             System.Collections.Generic.IEnumerable<string> authors,
@@ -70,22 +70,6 @@ namespace EBook.Downloader.Common
         public string Extension { get; }
 
         /// <summary>
-        /// The equals operator.
-        /// </summary>
-        /// <param name="first">The first parameter.</param>
-        /// <param name="second">The second parameter.</param>
-        /// <returns>The result of the operator.</returns>
-        public static bool operator ==(EpubInfo first, EpubInfo second) => first.Equals(second);
-
-        /// <summary>
-        /// The not-equals operator.
-        /// </summary>
-        /// <param name="first">The first parameter.</param>
-        /// <param name="second">The second parameter.</param>
-        /// <returns>The result of the operator.</returns>
-        public static bool operator !=(EpubInfo first, EpubInfo second) => !first.Equals(second);
-
-        /// <summary>
         /// Parses EPUB information from a path.
         /// </summary>
         /// <param name="path">The path.</param>
@@ -119,7 +103,7 @@ namespace EBook.Downloader.Common
             var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
             if (publisher is null)
             {
-                for (var index = 1; (publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) != null; index++)
+                for (var index = 1; (publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) is not null; index++)
                 {
                     publishers.Add(publisher.InnerText);
                 }
@@ -133,7 +117,7 @@ namespace EBook.Downloader.Common
             var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
             if (author is null)
             {
-                for (var index = 1; (author = document.SelectSingleNode($"/x:package/x:metadata/dc:creator[@id='author-{index}']", manager)) != null; index++)
+                for (var index = 1; (author = document.SelectSingleNode($"/x:package/x:metadata/dc:creator[@id='author-{index}']", manager)) is not null; index++)
                 {
                     authors.Add(author.InnerText);
                 }
@@ -147,7 +131,7 @@ namespace EBook.Downloader.Common
             var tag = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
             if (tag is null)
             {
-                for (var index = 1; (tag = document.SelectSingleNode($"/x:package/x:metadata/dc:subject[@id='subject-{index}']", manager)) != null; index++)
+                for (var index = 1; (tag = document.SelectSingleNode($"/x:package/x:metadata/dc:subject[@id='subject-{index}']", manager)) is not null; index++)
                 {
                     tags.Add(tag.InnerText);
                 }
@@ -159,7 +143,7 @@ namespace EBook.Downloader.Common
 
             var identifiers = new System.Collections.Generic.Dictionary<string, string>();
             var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
-            if (identifier != null)
+            if (identifier is not null)
             {
                 var split = identifier.InnerText.Split(new[] { ':' }, 2);
                 identifiers.Add(split[0], split[1]);
@@ -171,7 +155,7 @@ namespace EBook.Downloader.Common
             {
                 description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
                 var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
-                if (node?.InnerText != null)
+                if (node?.InnerText is not null)
                 {
                     longDescription = document.CreateElement("div");
                     longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
@@ -180,18 +164,5 @@ namespace EBook.Downloader.Common
 
             return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, System.IO.Path.GetExtension(path).TrimStart('.'), path);
         }
-
-        /// <inheritdoc/>
-        public override bool Equals(object obj) => obj is EpubInfo other ? this.Equals(other) : base.Equals(obj);
-
-        /// <inheritdoc/>
-        public bool Equals(EpubInfo other) => this.Title.Equals(other.Title, System.StringComparison.Ordinal)
-            && this.Authors.SequenceEqual(other.Authors)
-            && this.Publishers.SequenceEqual(other.Publishers)
-            && this.Path.Equals(other.Path, System.StringComparison.Ordinal)
-            && this.Extension.Equals(other.Extension, System.StringComparison.Ordinal);
-
-        /// <inheritdoc/>
-        public override int GetHashCode() => (this.Title, this.Authors, this.Publishers, this.Path, this.Extension).GetHashCode();
     }
 }

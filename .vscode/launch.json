@@ -9,7 +9,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/netcoreapp3.1/EBook.Downloader.Standard.EBooks.dll",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/net5.0/EBook.Downloader.Standard.EBooks.dll",
             "args": [
                 "%OneDriveConsumer%\\Books",
                 "--output-path",

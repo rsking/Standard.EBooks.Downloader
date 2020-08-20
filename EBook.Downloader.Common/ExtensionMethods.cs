@@ -28,12 +28,12 @@ namespace EBook.Downloader.Common
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
                 : default(HttpMessageHandler);
-            using var client = clientFactory is null
-                ? new HttpClient(handler)
-                : clientFactory.CreateClient("header");
+            using var client = handler is null && clientFactory is not null
+                ? clientFactory.CreateClient("header")
+                : new HttpClient(handler);
 
             var lastModified = await GetDateTimeOffset(uri, client).ConfigureAwait(false);
-            if (!lastModified.HasValue && modifier != null)
+            if (!lastModified.HasValue && modifier is not null)
             {
                 System.Uri updated;
                 while ((updated = modifier(uri)) != uri)
@@ -55,12 +55,9 @@ namespace EBook.Downloader.Common
             {
                 using var request = new HttpRequestMessage(HttpMethod.Head, uri);
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    return null;
-                }
-
-                return response.Content.Headers.LastModified;
+                return response.IsSuccessStatusCode
+                    ? response.Content.Headers.LastModified
+                    : default;
             }
         }
 
