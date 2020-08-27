@@ -16,14 +16,14 @@ namespace EBook.Downloader.Common
     public static class ExtensionMethods
     {
         /// <summary>
-        /// Checks to see whether the specified specified <see cref="System.Uri" /> needs to be downloaded based on the last modified date.
+        /// Checks to see whether the specified <see cref="System.Uri" /> needs to be downloaded based on the last modified date.
         /// </summary>
         /// <param name="uri">The uri to check.</param>
         /// <param name="dateTime">The last modified date time.</param>
         /// <param name="clientFactory">The client factory.</param>
         /// <param name="modifier">The URI modifier.</param>
-        /// <returns>Returns <see langword="true"/> if the last modified date does not match; otherwise <see langword="false"/>.</returns>
-        public static async Task<(bool download, System.Uri uri)> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = default, System.Func<System.Uri, System.Uri>? modifier = default)
+        /// <returns>Returns the download URI if the last modified date does not match; otherwise <see langword="null"/>.</returns>
+        public static async Task<System.Uri?> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = default, System.Func<System.Uri, System.Uri>? modifier = default)
         {
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
@@ -46,9 +46,9 @@ namespace EBook.Downloader.Common
                 }
             }
 
-            return lastModified.HasValue
-                ? (System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D, uri)
-                : default((bool, System.Uri));
+            return lastModified.HasValue && System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D
+                ? uri
+                : default;
 
             static async Task<System.DateTimeOffset?> GetDateTimeOffset(System.Uri uri, HttpClient client)
             {

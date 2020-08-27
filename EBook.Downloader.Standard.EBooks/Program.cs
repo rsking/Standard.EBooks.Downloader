@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -142,17 +142,16 @@ static async Task Process(
                 programLogger.LogInformation("{Title} - {Name} does not exist in Calibre", item.Title.Text, name);
             }
 
-            (bool shouldDownload, Uri actualUri) = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory, url =>
+            var actualUri = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory, url =>
             {
                 var uriString = url.ToString();
-                var fileName = GetFileNameWithoutExtension(uriString);
-                var extension = GetExtension(uriString);
                 var baseUri = uriString.Substring(0, uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1);
 
-                var split = fileName.Split('_');
+                var split = GetFileNameWithoutExtension(uriString).Split('_');
                 var number = Math.Max(split.Length - 1, 2);
-                fileName = string.Join('_', split.Take(number));
-                return new Uri(baseUri + fileName + extension);
+                split = split[..number];
+                var fileName = string.Join('_', split.Take(number));
+                return new Uri(baseUri + fileName + GetExtension(uriString));
 
                 static string GetFileNameWithoutExtension(string path)
                 {
@@ -163,21 +162,16 @@ static async Task Process(
                 static string GetExtension(string path)
                 {
                     var fileName = GetFileName(path);
-                    return fileName.Substring(fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase));
+                    return fileName[fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)..];
                 }
 
                 static string GetFileName(string path)
                 {
-                    return path.Substring(path.LastIndexOf('/') + 1);
+                    return path[(path.LastIndexOf('/') + 1)..];
                 }
             }).ConfigureAwait(false);
 
             if (actualUri is null)
-            {
-                programLogger.LogError("Invalid response from {uri}", uri);
-                continue;
-            }
-            else if (!shouldDownload)
             {
                 continue;
             }
