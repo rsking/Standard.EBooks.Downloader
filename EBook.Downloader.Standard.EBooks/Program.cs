@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------
 // <copyright file="Program.cs" company="RossKing">
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
@@ -125,14 +125,13 @@ static async Task Process(
                 var filePath = book.GetFullPath(calibreLibrary.Path, extension);
                 if (System.IO.File.Exists(filePath))
                 {
-                    var longDescription = checkDescription ? EpubInfo.Parse(filePath, true).LongDescription : default;
-
                     lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
 
                     // Only update the description/last modified from the EPUB
                     if (!kepub)
                     {
                         // see if we should update the date time
+                        var longDescription = checkDescription ? EpubInfo.Parse(filePath, true).LongDescription : default;
                         await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
                     }
                 }
