@@ -4,7 +4,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
-    <DotNetVersion>5.0.0-preview.7.*</DotNetVersion>
+    <DotNetVersion>5.0.0-preview.8.*</DotNetVersion>
   </PropertyGroup>
 
   <ItemGroup>
