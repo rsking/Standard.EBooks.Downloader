@@ -193,8 +193,10 @@ static async Task Process(
         lock (sentinelLock)
         {
             // update the sentinel time
-            for (var i = 1; i <= SentinelRetryCount; i++)
+            var i = 0;
+            while (true)
             {
+                i++;
                 try
                 {
                     System.IO.File.SetLastWriteTimeUtc(sentinelPath, item.LastUpdatedTime.UtcDateTime);
