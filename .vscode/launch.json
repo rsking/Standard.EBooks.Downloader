@@ -23,6 +23,27 @@
             "console": "externalTerminal",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "name": "Re-sync Standard EBooks",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/net5.0/EBook.Downloader.Standard.EBooks.dll",
+            "args": [
+                "%OneDriveConsumer%\\Books",
+                "--output-path",
+                "%USERPROFILE%\\Downloads\\books",
+                "--resync"
+            ],
+            "env": {
+                "DOTNET_ENVIRONMENT" : "Development"
+            },
+            "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
+            // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
+            "console": "externalTerminal",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }
