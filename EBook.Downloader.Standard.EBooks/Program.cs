@@ -112,8 +112,8 @@ static async Task Process(
         programLogger.LogInformation("Processing book {Title} - {Name}", item.Title.Text, name);
         using var bookScope = programLogger.BeginScope("{Title} - {Name}", item.Title.Text, name);
         foreach (var uri in item.Links
-            .Where(link => (link.MediaType == "application/epub+zip" && link.Uri.OriginalString.EndsWith("epub3", System.StringComparison.InvariantCultureIgnoreCase)) || link.MediaType == "application/kepub+zip")
-            .Select(link => link.Uri.IsAbsoluteUri ? link.Uri : new Uri(atomUri, link.Uri.OriginalString)))
+            .Where(IsValidEBook)
+            .Select(AbsoluteUri))
         {
             // get the date time
             var extension = uri.GetExtension();
@@ -209,6 +209,31 @@ static async Task Process(
                 System.Threading.Thread.Sleep(SentinelRetryWait);
             }
         }
+    }
+
+    static bool IsValidEBook(System.ServiceModel.Syndication.SyndicationLink link)
+    {
+        if (link.MediaType == "application/epub+zip")
+        {
+            var uri = link.Uri;
+            if (uri.OriginalString.EndsWith("epub3", System.StringComparison.InvariantCultureIgnoreCase))
+            {
+                return true;
+            }
+            else if (System.IO.Path.GetFileNameWithoutExtension(uri.OriginalString).EndsWith("_advanced"))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return link.MediaType == "application/kepub+zip";
+    }
+
+    Uri AbsoluteUri(System.ServiceModel.Syndication.SyndicationLink link)
+    {
+        return link.Uri.IsAbsoluteUri ? link.Uri : new Uri(atomUri, link.Uri.OriginalString);
     }
 
     static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
