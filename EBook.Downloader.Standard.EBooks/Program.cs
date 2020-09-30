@@ -220,7 +220,7 @@ static async Task Process(
             {
                 return true;
             }
-            else if (System.IO.Path.GetFileNameWithoutExtension(uri.OriginalString).EndsWith("_advanced"))
+            else if (System.IO.Path.GetFileNameWithoutExtension(uri.OriginalString).EndsWith("_advanced", System.StringComparison.InvariantCultureIgnoreCase))
             {
                 return true;
             }
