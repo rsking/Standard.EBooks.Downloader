@@ -28,15 +28,19 @@ namespace EBook.Downloader.Common
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
                 : default(HttpMessageHandler);
-            using var client = handler is null && clientFactory is not null
+            using var client = clientFactory is not null
+#pragma warning disable CA1062
                 ? clientFactory.CreateClient("header")
+#pragma warning restore CA1062
                 : new HttpClient(handler);
 
             var lastModified = await GetDateTimeOffset(uri, client).ConfigureAwait(false);
             if (!lastModified.HasValue && modifier is not null)
             {
                 System.Uri updated;
+#pragma warning disable CA1062
                 while ((updated = modifier(uri)) != uri)
+#pragma warning restore CA1062
                 {
                     lastModified = await GetDateTimeOffset(uri = updated, client).ConfigureAwait(false);
                     if (lastModified.HasValue)
