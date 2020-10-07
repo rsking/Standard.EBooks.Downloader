@@ -449,20 +449,20 @@ namespace EBook.Downloader.Common
 
         private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex)
         {
-            if (seriesName is null || seriesIndex == 0F)
-            {
-                // do not clear a series at this stage
-                return false;
-            }
-
             var (currentSeriesName, currentSeriesIndex) = await GetCurrentSeries().ConfigureAwait(false);
-
-            if (currentSeriesName == seriesName && currentSeriesIndex == seriesIndex)
+            if (currentSeriesName == seriesName && (seriesName is null || currentSeriesIndex == seriesIndex))
             {
+                // neither have a series, or the indexes match in the same series.
                 return false;
             }
 
-            if (currentSeriesName != seriesName && currentSeriesIndex != seriesIndex)
+            if (currentSeriesName != seriesName && seriesName is null)
+            {
+                // execute calibredb to clear the series
+                this.logger.LogInformation("Clearing series");
+                this.ExecuteCalibreDb("set_metadata", $"{id} --field series:\"{seriesName}\" --field series_index:\"{1}\"");
+            }
+            else if (currentSeriesName != seriesName && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
                 this.logger.LogInformation("Updating series and index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
@@ -471,13 +471,13 @@ namespace EBook.Downloader.Common
             else if (currentSeriesName != seriesName && currentSeriesIndex == seriesIndex)
             {
                 // execute calibredb to update the series
-                this.logger.LogInformation("Updating series to {Series}", seriesName);
+                this.logger.LogInformation("Updating series to {Series}:{Series}", seriesName, seriesIndex);
                 this.ExecuteCalibreDb("set_metadata", $"{id} --field series:\"{seriesName}\"");
             }
             else if (currentSeriesName == seriesName && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
-                this.logger.LogInformation("Updating series index to {SeriesIndex}", seriesIndex);
+                this.logger.LogInformation("Updating series index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
                 this.ExecuteCalibreDb("set_metadata", $"{id} --field series_index:\"{seriesIndex}\"");
             }
 
@@ -492,7 +492,7 @@ namespace EBook.Downloader.Common
                     return (reader.GetString(0), reader.GetFloat(1));
                 }
 
-                return (default, default);
+                return (default, 1F);
             }
         }
 
