@@ -34,7 +34,8 @@
                 "%OneDriveConsumer%\\Books",
                 "--output-path",
                 "%USERPROFILE%\\Downloads\\books",
-                "--resync"
+                "--resync",
+                "--check-metadata"
             ],
             "env": {
                 "DOTNET_ENVIRONMENT" : "Development"

@@ -21,8 +21,10 @@ namespace EBook.Downloader.Common
             System.Collections.Generic.IReadOnlyDictionary<string, string> identifiers,
             string? description,
             System.Xml.XmlElement? longDescription,
+            string? seriesName,
+            int seriesIndex,
             string extension,
-            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Identifiers, this.Description, this.LongDescription, this.Extension, this.Path) = (authors, title, publishers, tags, identifiers, description, longDescription, extension, path);
+            string path) => (this.Authors, this.Title, this.Publishers, this.Tags, this.Identifiers, this.Description, this.LongDescription, this.SeriesName, this.SeriesIndex, this.Extension, this.Path) = (authors, title, publishers, tags, identifiers, description, longDescription, seriesName, seriesIndex, extension, path);
 
         /// <summary>
         /// Gets the authors.
@@ -58,6 +60,16 @@ namespace EBook.Downloader.Common
         /// Gets the long description.
         /// </summary>
         public System.Xml.XmlElement? LongDescription { get; }
+
+        /// <summary>
+        /// Gets the series name.
+        /// </summary>
+        public string? SeriesName { get; }
+
+        /// <summary>
+        /// Gets the series index.
+        /// </summary>
+        public int SeriesIndex { get; }
 
         /// <summary>
         /// Gets the path.
@@ -99,70 +111,106 @@ namespace EBook.Downloader.Common
             manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
 
             var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
-            var publishers = new System.Collections.Generic.List<string>();
-            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
-            if (publisher is null)
+            var publishers = GetPublishers(document, manager);
+            var authors = GetAuthors(document, manager);
+            var tags = GetTags(document, manager);
+            var identifiers = GetIdentifiers(document, manager).ToDictionary(x => x.Key, x => x.Value);
+            var (description, longDescription) = parseDescription ? GetDescription(document, manager) : (default, default);
+            var (_, seriesName, _, seriesPosition) = GetCollections(document, manager).FirstOrDefault(collection => collection.Type == "series");
+
+            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, seriesName, seriesPosition, System.IO.Path.GetExtension(path).TrimStart('.'), path);
+
+            static System.Collections.Generic.IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
-                for (var index = 1; (publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) is not null; index++)
+                var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
+                if (publisher is null)
                 {
-                    publishers.Add(publisher.InnerText);
+                    for (var index = 1; (publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) is not null; index++)
+                    {
+                        yield return publisher.InnerText;
+                    }
+                }
+                else
+                {
+                    yield return publisher.InnerText;
                 }
             }
-            else
-            {
-                publishers.Add(publisher.InnerText);
-            }
 
-            var authors = new System.Collections.Generic.List<string>();
-            var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
-            if (author is null)
+            static System.Collections.Generic.IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
-                for (var index = 1; (author = document.SelectSingleNode($"/x:package/x:metadata/dc:creator[@id='author-{index}']", manager)) is not null; index++)
+                var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
+                if (author is null)
                 {
-                    authors.Add(author.InnerText);
+                    for (var index = 1; (author = document.SelectSingleNode($"/x:package/x:metadata/dc:creator[@id='author-{index}']", manager)) is not null; index++)
+                    {
+                        yield return author.InnerText;
+                    }
+                }
+                else
+                {
+                    yield return author.InnerText;
                 }
             }
-            else
-            {
-                authors.Add(author.InnerText);
-            }
 
-            var tags = new System.Collections.Generic.List<string>();
-            var tag = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
-            if (tag is null)
+            static System.Collections.Generic.IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
-                for (var index = 1; (tag = document.SelectSingleNode($"/x:package/x:metadata/dc:subject[@id='subject-{index}']", manager)) is not null; index++)
+                var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
+                if (collection is null)
                 {
-                    tags.Add(tag.InnerText);
+                    for (var index = 1; (collection = document.SelectSingleNode($"/x:package/x:metadata/dc:subject[@id='subject-{index}']", manager)) is not null; index++)
+                    {
+                        yield return collection.InnerText;
+                    }
+                }
+                else
+                {
+                    yield return collection.InnerText;
                 }
             }
-            else
+
+            static System.Collections.Generic.IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
-                tags.Add(tag.InnerText);
+                var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
+                if (identifier is not null)
+                {
+                    var split = identifier.InnerText.Split(new[] { ':' }, 2);
+                    yield return (split[0], split[1]);
+                }
             }
 
-            var identifiers = new System.Collections.Generic.Dictionary<string, string>();
-            var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
-            if (identifier is not null)
+            static (string? Description, System.Xml.XmlElement? LongDescription) GetDescription(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
-                var split = identifier.InnerText.Split(new[] { ':' }, 2);
-                identifiers.Add(split[0], split[1]);
-            }
-
-            string? description = default;
-            System.Xml.XmlElement? longDescription = default;
-            if (parseDescription)
-            {
-                description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
+                var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
                 var node = document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager);
+                System.Xml.XmlElement? longDescription = default;
                 if (node?.InnerText is not null)
                 {
                     longDescription = document.CreateElement("div");
                     longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
                 }
+
+                return (description, longDescription);
             }
 
-            return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, System.IO.Path.GetExtension(path).TrimStart('.'), path);
+            static System.Collections.Generic.IEnumerable<(string Id, string Name, string? Type, int Position)> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+            {
+                var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
+                if (nodes is null)
+                {
+                    yield break;
+                }
+
+                foreach (var node in nodes.OfType<System.Xml.XmlNode>())
+                {
+                    var id = node.Attributes["id"].Value;
+                    var name = node.InnerText;
+
+                    var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager)?.InnerText;
+                    var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager)?.InnerText;
+
+                    yield return (id, name, collectionType, groupPosition is null ? 0 : int.Parse(groupPosition, System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
         }
     }
 }

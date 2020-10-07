@@ -32,7 +32,7 @@ const string AtomUrl = "https://standardebooks.org/opds/all";
 var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
-    .AddOption(new Option<bool>(new[] { "-c", "--check-description" }, "Whether to check the description"))
+    .AddOption(new Option<bool>(new[] { "-c", "--check-metadata" }, "Whether to check the metadata"))
     .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
     .AddOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
     .UseHost(
@@ -59,7 +59,7 @@ static async Task Process(
     IHost host,
     System.IO.DirectoryInfo calibreLibraryPath,
     System.IO.DirectoryInfo outputPath,
-    bool checkDescription = false,
+    bool checkMetadata = false,
     bool resync = false,
     int maxTimeOffset = MaxTimeOffset)
 {
@@ -131,8 +131,18 @@ static async Task Process(
                     if (!kepub)
                     {
                         // see if we should update the date time
-                        var longDescription = checkDescription ? EpubInfo.Parse(filePath, true).LongDescription : default;
-                        await calibreLibrary.UpdateLastModifiedAndDescriptionAsync(book, lastWriteTimeUtc, longDescription, maxTimeOffset).ConfigureAwait(false);
+                        System.Xml.XmlElement? longDescription = default;
+                        string? seriesName = default;
+                        float seriesIndex = default;
+                        if (checkMetadata)
+                        {
+                            var epub = EpubInfo.Parse(filePath, true);
+                            longDescription = epub.LongDescription;
+                            seriesName = epub.SeriesName;
+                            seriesIndex = (float)epub.SeriesIndex;
+                        }
+
+                        await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, longDescription, seriesName, seriesIndex, maxTimeOffset).ConfigureAwait(false);
                     }
                 }
             }
