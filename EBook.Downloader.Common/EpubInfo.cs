@@ -81,6 +81,13 @@ namespace EBook.Downloader.Common
         /// </summary>
         public string Extension { get; }
 
+        private enum CollectionType
+        {
+            None = 0,
+            Set = 1,
+            Series = 2,
+        }
+
         /// <summary>
         /// Parses EPUB information from a path.
         /// </summary>
@@ -116,7 +123,9 @@ namespace EBook.Downloader.Common
             var tags = GetTags(document, manager);
             var identifiers = GetIdentifiers(document, manager).ToDictionary(x => x.Key, x => x.Value);
             var (description, longDescription) = parseDescription ? GetDescription(document, manager) : (default, default);
-            var (_, seriesName, _, seriesPosition) = GetCollections(document, manager).FirstOrDefault(collection => collection.Type == "series");
+            var (_, seriesName, _, seriesPosition) = GetCollections(document, manager)
+                .OrderByDescending(collection => (int)collection.Type)
+                .FirstOrDefault();
 
             return new EpubInfo(authors.ToArray(), title, publishers.ToArray(), tags.ToArray(), identifiers, description, longDescription, seriesName, seriesPosition, System.IO.Path.GetExtension(path).TrimStart('.'), path);
 
@@ -192,7 +201,7 @@ namespace EBook.Downloader.Common
                 return (description, longDescription);
             }
 
-            static System.Collections.Generic.IEnumerable<(string Id, string Name, string? Type, int Position)> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+            static System.Collections.Generic.IEnumerable<(string Id, string Name, CollectionType Type, int Position)> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
                 var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
                 if (nodes is null)
@@ -208,7 +217,7 @@ namespace EBook.Downloader.Common
                     var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager)?.InnerText;
                     var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager)?.InnerText;
 
-                    yield return (id, name, collectionType, groupPosition is null ? 0 : int.Parse(groupPosition, System.Globalization.CultureInfo.InvariantCulture));
+                    yield return (id, name, collectionType is null ? CollectionType.None : (CollectionType)System.Enum.Parse(typeof(CollectionType), collectionType, true), groupPosition is null ? 0 : int.Parse(groupPosition, System.Globalization.CultureInfo.InvariantCulture));
                 }
             }
         }
