@@ -277,6 +277,7 @@ namespace EBook.Downloader.Common
                     }
 
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
+                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
                     await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
@@ -373,13 +374,23 @@ namespace EBook.Downloader.Common
                 using var reader = await this.selectBookByIdCommand.ExecuteReaderAsync().ConfigureAwait(false);
                 if (await reader.ReadAsync().ConfigureAwait(false))
                 {
-                    var newBook = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
-                    book = newBook;
+                    book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
                 }
             }
 
             await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset).ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Updates the last modified date, description, and series.
+        /// </summary>
+        /// <param name="book">The book.</param>
+        /// <param name="lastModified">The last modified date.</param>
+        /// <param name="maxTimeOffset">The maximum time offset.</param>
+        /// <returns>The task associated with this function.</returns>
+        public Task UpdateLastModified(CalibreBook book, DateTime lastModified, int maxTimeOffset) => book is null
+            ? throw new ArgumentNullException(nameof(book))
+            : this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset);
 
         /// <inheritdoc />
         public void Dispose()
