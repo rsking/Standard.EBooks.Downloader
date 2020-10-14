@@ -131,18 +131,15 @@ static async Task Process(
                     if (!kepub)
                     {
                         // see if we should update the date time
-                        System.Xml.XmlElement? longDescription = default;
-                        string? seriesName = default;
-                        float seriesIndex = default;
                         if (checkMetadata)
                         {
                             var epub = EpubInfo.Parse(filePath, true);
-                            longDescription = epub.LongDescription;
-                            seriesName = epub.SeriesName;
-                            seriesIndex = (float)epub.SeriesIndex;
+                            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, epub.SeriesName, (float)epub.SeriesIndex, maxTimeOffset).ConfigureAwait(false);
                         }
-
-                        await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, longDescription, seriesName, seriesIndex, maxTimeOffset).ConfigureAwait(false);
+                        else
+                        {
+                            await calibreLibrary.UpdateLastModified(book, lastWriteTimeUtc, maxTimeOffset);
+                        }
                     }
                 }
             }
