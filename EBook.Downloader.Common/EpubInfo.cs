@@ -121,7 +121,7 @@ namespace EBook.Downloader.Common
             var publishers = GetPublishers(document, manager);
             var authors = GetAuthors(document, manager);
             var tags = GetTags(document, manager);
-            var identifiers = GetIdentifiers(document, manager).ToDictionary(x => x.Key, x => x.Value);
+            var identifiers = GetIdentifiers(document, manager).ToDictionary(x => x.Key, x => x.Value, System.StringComparer.Ordinal);
             var (description, longDescription) = parseDescription ? GetDescription(document, manager) : (default, default);
             var (_, seriesName, _, seriesPosition) = GetCollections(document, manager)
                 .OrderByDescending(collection => (int)collection.Type)
@@ -134,7 +134,7 @@ namespace EBook.Downloader.Common
                 var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
                 if (publisher is null)
                 {
-                    for (var index = 1; (publisher = document.SelectSingleNode($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']", manager)) is not null; index++)
+                    for (var index = 1; (publisher = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']"), manager)) is not null; index++)
                     {
                         yield return publisher.InnerText;
                     }
@@ -150,7 +150,7 @@ namespace EBook.Downloader.Common
                 var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
                 if (author is null)
                 {
-                    for (var index = 1; (author = document.SelectSingleNode($"/x:package/x:metadata/dc:creator[@id='author-{index}']", manager)) is not null; index++)
+                    for (var index = 1; (author = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:creator[@id='author-{index}']"), manager)) is not null; index++)
                     {
                         yield return author.InnerText;
                     }
@@ -166,7 +166,7 @@ namespace EBook.Downloader.Common
                 var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
                 if (collection is null)
                 {
-                    for (var index = 1; (collection = document.SelectSingleNode($"/x:package/x:metadata/dc:subject[@id='subject-{index}']", manager)) is not null; index++)
+                    for (var index = 1; (collection = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:subject[@id='subject-{index}']"), manager)) is not null; index++)
                     {
                         yield return collection.InnerText;
                     }
@@ -214,10 +214,17 @@ namespace EBook.Downloader.Common
                     var id = node.Attributes["id"].Value;
                     var name = node.InnerText;
 
-                    var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager)?.InnerText;
-                    var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager)?.InnerText;
+                    var collectionTypeNode = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager)?.InnerText;
+                    var collectionType = collectionTypeNode is null
+                        ? CollectionType.None
+                        : (CollectionType)System.Enum.Parse(typeof(CollectionType), collectionTypeNode, ignoreCase: true);
 
-                    yield return (id, name, collectionType is null ? CollectionType.None : (CollectionType)System.Enum.Parse(typeof(CollectionType), collectionType, true), groupPosition is null ? 0 : int.Parse(groupPosition, System.Globalization.CultureInfo.InvariantCulture));
+                    var groupPositionNode = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager)?.InnerText;
+                    var groupPosition = groupPositionNode is null
+                        ? 0
+                        : int.Parse(groupPositionNode, System.Globalization.CultureInfo.InvariantCulture);
+
+                    yield return (id, name, collectionType, groupPosition);
                 }
             }
         }

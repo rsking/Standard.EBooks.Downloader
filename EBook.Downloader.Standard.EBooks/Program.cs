@@ -138,7 +138,7 @@ static async Task Process(
                         }
                         else
                         {
-                            await calibreLibrary.UpdateLastModified(book, lastWriteTimeUtc, maxTimeOffset);
+                            await calibreLibrary.UpdateLastModified(book, lastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
                         }
                     }
                 }
@@ -220,22 +220,18 @@ static async Task Process(
 
     static bool IsValidEBook(System.ServiceModel.Syndication.SyndicationLink link)
     {
-        if (link.MediaType == "application/epub+zip")
-        {
-            var uri = link.Uri;
-            if (uri.OriginalString.EndsWith("epub3", System.StringComparison.InvariantCultureIgnoreCase))
-            {
-                return true;
-            }
-            else if (System.IO.Path.GetFileNameWithoutExtension(uri.OriginalString).EndsWith("_advanced", System.StringComparison.InvariantCultureIgnoreCase))
-            {
-                return true;
-            }
+        return IsEPub(link) || IsKobo(link);
 
-            return false;
+        static bool IsEPub(System.ServiceModel.Syndication.SyndicationLink link)
+        {
+            return string.Equals(link.MediaType, "application/epub+zip", System.StringComparison.Ordinal)
+                && (link.Uri.OriginalString.EndsWith("epub3", System.StringComparison.InvariantCultureIgnoreCase) || System.IO.Path.GetFileNameWithoutExtension(link.Uri.OriginalString).EndsWith("_advanced", System.StringComparison.InvariantCultureIgnoreCase));
         }
 
-        return link.MediaType == "application/kepub+zip";
+        static bool IsKobo(System.ServiceModel.Syndication.SyndicationLink link)
+        {
+            return string.Equals(link.MediaType, "application/kepub+zip", System.StringComparison.Ordinal);
+        }
     }
 
     Uri AbsoluteUri(System.ServiceModel.Syndication.SyndicationLink link)

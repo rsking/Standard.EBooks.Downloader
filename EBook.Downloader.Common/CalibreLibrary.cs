@@ -196,51 +196,12 @@ namespace EBook.Downloader.Common
 
                 if (book is null)
                 {
-                    // add this book
-                    var coverFile = default(string);
-                    var args = $"--duplicates --languages eng \"{info.Path}\"";
-
-                    // extract out the cover
-                    using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path))
-                    {
-                        var coverEntry = zipFile.Entries.FirstOrDefault(entry => entry.Name == "cover.svg");
-                        if (coverEntry is not null)
-                        {
-                            coverFile = System.IO.Path.GetTempFileName();
-                            using var zipStream = coverEntry.Open();
-                            using var fileStream = System.IO.File.OpenWrite(coverFile);
-                            await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
-                            args += $" --cover=\"{coverFile}\"";
-                        }
-                    }
-
-                    if (info.Tags.Any())
-                    {
-                        // sanitise the tags
-                        var sanitisedTags = info.Tags
-                            .SelectMany(tag => tag.Split(new[] { "--" }, StringSplitOptions.RemoveEmptyEntries))
-                            .Select(tag => tag.Trim().Replace(",", ";"))
-                            .Distinct();
-                        args += $" --tags=\"{string.Join(", ", sanitisedTags)}\"";
-                    }
-
-                    // we need to add this
-                    this.ExecuteCalibreDb("add", args);
-                    if (coverFile != default && System.IO.File.Exists(coverFile))
-                    {
-                        System.IO.File.Delete(coverFile);
-                    }
-
-                    using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
-                    if (await reader.ReadAsync().ConfigureAwait(false))
-                    {
-                        book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
-                    }
+                    book = await AddBookAsync(info).ConfigureAwait(false);
                 }
                 else if (info.Path is not null)
                 {
                     // add this format
-                    this.ExecuteCalibreDb("add_format", "--dont-replace " + book.Id + " \"" + info.Path + "\"");
+                    this.ExecuteCalibreDb("add_format", FormattableString.Invariant($"--dont-replace {book.Id} \"{info.Path}\""));
                 }
 
                 if (book is not null && book.Path is not null && book.Name is not null && info.Path is not null)
@@ -252,38 +213,82 @@ namespace EBook.Downloader.Common
 
                 return true;
             }
-            else
+
+            var fullPath = book.GetFullPath(this.Path, System.IO.Path.GetExtension(info.Path));
+            if (System.IO.File.Exists(fullPath))
             {
-                var fullPath = book.GetFullPath(this.Path, System.IO.Path.GetExtension(info.Path));
-                if (System.IO.File.Exists(fullPath))
+                // see if this has changed at all
+                if (!CheckFiles(info.Path, fullPath, this.logger))
                 {
-                    // see if this has changed at all
-                    if (!CheckFiles(info.Path, fullPath, this.logger))
+                    // files are not the same. Copy in the new file
+                    this.logger.LogInformation("Replacing {0} as files do not match", book.Name);
+
+                    // access the destination file first
+                    var bytes = new byte[ushort.MaxValue];
+                    using (var stream = System.IO.File.OpenRead(fullPath))
                     {
-                        // files are not the same. Copy in the new file
-                        this.logger.LogInformation("Replacing {0} as files do not match", book.Name);
-
-                        // access the destination file first
-                        var bytes = new byte[ushort.MaxValue];
-                        using (var stream = System.IO.File.OpenRead(fullPath))
+                        int length;
+                        while ((length = await stream.ReadAsync(bytes, 0, bytes.Length).ConfigureAwait(false)) == bytes.Length)
                         {
-                            int length;
-                            while ((length = stream.Read(bytes, 0, bytes.Length)) == bytes.Length)
-                            {
-                            }
                         }
-
-                        System.IO.File.Copy(info.Path, fullPath, true);
                     }
 
-                    await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
-                    await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
-                    return true;
+                    System.IO.File.Copy(info.Path, fullPath, overwrite: true);
                 }
+
+                await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
+                await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
+                await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                return true;
             }
 
             return false;
+
+            async Task<CalibreBook?> AddBookAsync(EpubInfo info)
+            {
+                // add this book
+                var coverFile = default(string);
+                var args = $"--duplicates --languages eng \"{info.Path}\"";
+
+                // extract out the cover
+                using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path))
+                {
+                    var coverEntry = zipFile.Entries.FirstOrDefault(entry => string.Equals(entry.Name, "cover.svg", StringComparison.Ordinal));
+                    if (coverEntry is not null)
+                    {
+                        coverFile = System.IO.Path.GetTempFileName();
+                        using var zipStream = coverEntry.Open();
+                        using var fileStream = System.IO.File.OpenWrite(coverFile);
+                        await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
+                        args += $" --cover=\"{coverFile}\"";
+                    }
+                }
+
+                if (info.Tags.Any())
+                {
+                    // sanitise the tags
+                    var sanitisedTags = info.Tags
+                        .SelectMany(tag => tag.Split(new[] { "--" }, StringSplitOptions.RemoveEmptyEntries))
+                        .Select(tag => tag.Trim().Replace(",", ";"))
+                        .Distinct(StringComparer.Ordinal);
+                    args += $" --tags=\"{string.Join(", ", sanitisedTags)}\"";
+                }
+
+                // we need to add this
+                this.ExecuteCalibreDb("add", args);
+                if (coverFile != default && System.IO.File.Exists(coverFile))
+                {
+                    System.IO.File.Delete(coverFile);
+                }
+
+                using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
+                if (await reader.ReadAsync().ConfigureAwait(false))
+                {
+                    return new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                }
+
+                return default;
+            }
 
             static bool CheckFiles(string source, string destination, ILogger logger)
             {
@@ -396,7 +401,7 @@ namespace EBook.Downloader.Common
         public void Dispose()
         {
             // Do not change this code. Put cleanup code in Dispose(bool disposing) below.
-            this.Dispose(true);
+            this.Dispose(disposing: true);
             GC.SuppressFinalize(this);
         }
 
@@ -435,14 +440,14 @@ namespace EBook.Downloader.Common
             this.selectDescriptionCommand.Parameters[":id"].Value = id;
             var currentDescription = SanitiseHtml(await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string);
             var newDescription = SanitiseHtml(longDescription.OuterXml);
-            if (currentDescription == newDescription)
+            if (string.Equals(currentDescription, newDescription, StringComparison.Ordinal))
             {
                 return false;
             }
 
             // execute calibredb to update the description
             this.logger.LogInformation("Updating description to the long description");
-            this.ExecuteCalibreDb("set_metadata", $"{id} --field comments:\"{newDescription}\"");
+            this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field comments:\"{newDescription}\""));
             return true;
 
             static string? SanitiseHtml(string? html)
@@ -461,35 +466,35 @@ namespace EBook.Downloader.Common
         private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex)
         {
             var (currentSeriesName, currentSeriesIndex) = await GetCurrentSeries().ConfigureAwait(false);
-            if (currentSeriesName == seriesName && (seriesName is null || currentSeriesIndex == seriesIndex))
+            if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && (seriesName is null || currentSeriesIndex == seriesIndex))
             {
                 // neither have a series, or the indexes match in the same series.
                 return false;
             }
 
-            if (currentSeriesName != seriesName && seriesName is null)
+            if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && seriesName is null)
             {
                 // execute calibredb to clear the series
                 this.logger.LogInformation("Clearing series");
-                this.ExecuteCalibreDb("set_metadata", $"{id} --field series:\"{seriesName}\" --field series_index:\"{1}\"");
+                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\" --field series_index:\"{1}\""));
             }
-            else if (currentSeriesName != seriesName && currentSeriesIndex != seriesIndex)
+            else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
                 this.logger.LogInformation("Updating series and index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", $"{id} --field series:\"{seriesName}\" --field series_index:\"{seriesIndex}\"");
+                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\" --field series_index:\"{seriesIndex}\""));
             }
-            else if (currentSeriesName != seriesName && currentSeriesIndex == seriesIndex)
+            else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex == seriesIndex)
             {
                 // execute calibredb to update the series
                 this.logger.LogInformation("Updating series to {Series}:{Series}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", $"{id} --field series:\"{seriesName}\"");
+                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\""));
             }
-            else if (currentSeriesName == seriesName && currentSeriesIndex != seriesIndex)
+            else if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
                 this.logger.LogInformation("Updating series index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", $"{id} --field series_index:\"{seriesIndex}\"");
+                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series_index:\"{seriesIndex}\""));
             }
 
             return true;
