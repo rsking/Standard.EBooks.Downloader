@@ -115,9 +115,7 @@ namespace EBook.Downloader.Common
                 this.dropTriggerCommand = this.connection.CreateCommand();
                 this.dropTriggerCommand.CommandText = $"DROP TRIGGER IF EXISTS {TriggerName}";
                 this.createTriggerCommand = this.connection.CreateCommand();
-#pragma warning disable CA2100 // Review SQL queries for security vulnerabilities
                 this.createTriggerCommand.CommandText = createTriggerCommandText;
-#pragma warning restore CA2100 // Review SQL queries for security vulnerabilities
             }
         }
 
