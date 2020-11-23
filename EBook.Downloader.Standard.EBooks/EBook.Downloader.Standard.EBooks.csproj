@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlAgilityPack" Version="1.11.27" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.28" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(DotNetVersion)" />
     <PackageReference Include="Serilog.AspNetCore" Version="3.4.0" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
