@@ -220,15 +220,15 @@ static async Task Process(
 
     static bool IsValidEBook(System.ServiceModel.Syndication.SyndicationLink link)
     {
-        return IsEPub(link) || IsKobo(link);
+        return IsEPub() || IsKobo();
 
-        static bool IsEPub(System.ServiceModel.Syndication.SyndicationLink link)
+        bool IsEPub()
         {
             return string.Equals(link.MediaType, "application/epub+zip", StringComparison.Ordinal)
                 && (link.Uri.OriginalString.EndsWith("epub3", StringComparison.InvariantCultureIgnoreCase) || System.IO.Path.GetFileNameWithoutExtension(link.Uri.OriginalString).EndsWith("_advanced", System.StringComparison.InvariantCultureIgnoreCase));
         }
 
-        static bool IsKobo(System.ServiceModel.Syndication.SyndicationLink link)
+        bool IsKobo()
         {
             return string.Equals(link.MediaType, "application/kepub+zip", StringComparison.Ordinal);
         }
