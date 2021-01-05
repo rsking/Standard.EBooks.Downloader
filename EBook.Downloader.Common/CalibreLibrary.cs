@@ -145,7 +145,7 @@ namespace EBook.Downloader.Common
 
             using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
             return await reader.ReadAsync().ConfigureAwait(false)
-                ? new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3))
+                ? new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) }
                 : default;
         }
 
@@ -173,13 +173,13 @@ namespace EBook.Downloader.Common
                 var identifier = info.Identifiers.First();
                 this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = identifier.Key;
                 this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier.Value;
-                this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = info.Extension.TrimStart('.').ToUpperInvariant();
+                this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = info.Path.Extension.TrimStart('.').ToUpperInvariant();
 
                 using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
                 {
                     if (await reader.ReadAsync().ConfigureAwait(false))
                     {
-                        book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                        book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
                     }
                 }
 
@@ -193,7 +193,7 @@ namespace EBook.Downloader.Common
                     {
                         if (await reader.ReadAsync().ConfigureAwait(false))
                         {
-                            book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                            book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
                         }
                     }
 
@@ -211,13 +211,13 @@ namespace EBook.Downloader.Common
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
                         await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                        await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     }
 
                     return true;
                 }
 
-                var fullPath = book.GetFullPath(this.Path, System.IO.Path.GetExtension(info.Path));
+                var fullPath = book.GetFullPath(this.Path, info.Path.Extension);
                 if (System.IO.File.Exists(fullPath))
                 {
                     // see if this has changed at all
@@ -236,12 +236,12 @@ namespace EBook.Downloader.Common
                             }
                         }
 
-                        System.IO.File.Copy(info.Path, fullPath, overwrite: true);
+                        info.Path.CopyTo(fullPath, overwrite: true);
                     }
 
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
                     await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
-                    await UpdateLastModifiedAsync(book.Id, book.Name, info.Path, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
 
@@ -254,7 +254,7 @@ namespace EBook.Downloader.Common
                     var args = $"--duplicates --languages eng \"{info.Path}\"";
 
                     // extract out the cover
-                    using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path))
+                    using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path.FullName))
                     {
                         var coverEntry = zipFile.Entries.FirstOrDefault(entry => string.Equals(entry.Name, "cover.svg", StringComparison.Ordinal));
                         if (coverEntry is not null)
@@ -287,30 +287,28 @@ namespace EBook.Downloader.Common
                     using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
                     if (await reader.ReadAsync().ConfigureAwait(false))
                     {
-                        return new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                        return new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
                     }
 
                     return default;
                 }
 
-                static bool CheckFiles(string source, string destination, ILogger logger)
+                static bool CheckFiles(System.IO.FileInfo source, string destination, ILogger logger)
                 {
-                    var sourceFileInfo = new System.IO.FileInfo(source);
                     var destinationFileInfo = new System.IO.FileInfo(destination);
-
-                    if (sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime)
+                    if (source.LastWriteTime != destinationFileInfo.LastWriteTime)
                     {
                         logger.LogDebug("source and destination have different modified dates");
                         return false;
                     }
 
-                    if (sourceFileInfo.Length != destinationFileInfo.Length)
+                    if (source.Length != destinationFileInfo.Length)
                     {
                         logger.LogDebug("source and destination are different lengths");
                         return false;
                     }
 
-                    var sourceHash = GetFileHash(sourceFileInfo.FullName);
+                    var sourceHash = GetFileHash(source.FullName);
                     var destinationHash = GetFileHash(destinationFileInfo.FullName);
 
                     if (sourceHash.Length != destinationHash.Length)
@@ -338,20 +336,12 @@ namespace EBook.Downloader.Common
                     }
                 }
 
-                Task UpdateLastModifiedAsync(int id, string name, string path, DateTime lastModified, int maxTimeOffset)
-                {
-                    return this.UpdateLastModifiedAsync(id, name, new System.IO.FileInfo(path).LastWriteTimeUtc, lastModified, maxTimeOffset);
-                }
-
                 void UpdateLastWriteTime(string path, string name, EpubInfo info)
                 {
-                    var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{System.IO.Path.GetExtension(info.Path)}");
+                    var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{info.Path.Extension}");
                     if (System.IO.File.Exists(fullPath))
                     {
-                        var fileSystemInfo = new System.IO.FileInfo(info.Path);
-                        var dateTime = fileSystemInfo.LastWriteTime;
-
-                        _ = new System.IO.FileInfo(fullPath) { LastWriteTime = dateTime };
+                        _ = new System.IO.FileInfo(fullPath) { LastWriteTime = info.Path.LastWriteTime };
                     }
                 }
             }
@@ -388,7 +378,7 @@ namespace EBook.Downloader.Common
                     using var reader = await this.selectBookByIdCommand.ExecuteReaderAsync().ConfigureAwait(false);
                     if (await reader.ReadAsync().ConfigureAwait(false))
                     {
-                        book = new CalibreBook(reader.GetInt32(0), reader.GetString(2), reader.GetString(1), reader.GetString(3));
+                        book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
                     }
                 }
 

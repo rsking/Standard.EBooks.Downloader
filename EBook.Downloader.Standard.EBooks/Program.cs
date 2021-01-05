@@ -133,8 +133,8 @@ static async Task Process(
                         // see if we should update the date time
                         if (checkMetadata)
                         {
-                            var epub = EpubInfo.Parse(filePath, true);
-                            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, epub.SeriesName, (float)epub.SeriesIndex, maxTimeOffset).ConfigureAwait(false);
+                            var epub = EpubInfo.Parse(filePath, parseDescription: true);
+                            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, epub.SeriesName, epub.SeriesIndex, maxTimeOffset).ConfigureAwait(false);
                         }
                         else
                         {
@@ -192,8 +192,8 @@ static async Task Process(
             var epubInfo = EpubInfo.Parse(path, !kepub);
             if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset).ConfigureAwait(false))
             {
-                programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Extension);
-                System.IO.File.Delete(epubInfo.Path);
+                programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
+                epubInfo.Path.Delete();
             }
         }
 
@@ -249,7 +249,7 @@ static async Task Process(
             logger.LogInformation("Downloading book {0}", fileName);
             try
             {
-                await uri.DownloadAsFileAsync(fullPath, false, httpClientFactory).ConfigureAwait(false);
+                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory).ConfigureAwait(false);
             }
             catch (System.Net.Http.HttpRequestException ex)
             {

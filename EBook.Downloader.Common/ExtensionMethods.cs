@@ -28,7 +28,7 @@ namespace EBook.Downloader.Common
             using var handler = clientFactory is null
                 ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
                 : default(HttpMessageHandler);
-            using var client = clientFactory is not null
+            using var client = handler is null && clientFactory is not null
                 ? clientFactory.CreateClient("header")
                 : new HttpClient(handler);
 

@@ -14,43 +14,28 @@ namespace EBook.Downloader.Common
         /// <summary>
         /// Initialises a new instance of the <see cref="CalibreBook" /> class.
         /// </summary>
-        /// <param name="id">The book ID.</param>
-        /// <param name="name">The book name.</param>
-        /// <param name="path">The book path.</param>
         /// <param name="lastModified">The book last modified date.</param>
-        public CalibreBook(int id, string name, string path, string lastModified)
-            : this(id, name, path, System.DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal))
-        {
-        }
-
-        /// <summary>
-        /// Initialises a new instance of the <see cref="CalibreBook" /> class.
-        /// </summary>
-        /// <param name="id">The book ID.</param>
-        /// <param name="name">The book name.</param>
-        /// <param name="path">The book path.</param>
-        /// <param name="lastModified">The book last modified date.</param>
-        public CalibreBook(int id, string name, string path, System.DateTime lastModified) => (this.Id, this.Name, this.Path, this.LastModified) = (id, name, path, lastModified);
+        public CalibreBook(string lastModified) => this.LastModified = System.DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
 
         /// <summary>
         /// Gets the ID.
         /// </summary>
-        public int Id { get; }
+        public int Id { get; init; }
 
         /// <summary>
         /// Gets the Name.
         /// </summary>
-        public string Name { get; }
+        public string Name { get; init; } = string.Empty;
 
         /// <summary>
         /// Gets the Path.
         /// </summary>
-        public string Path { get; }
+        public string Path { get; init; } = string.Empty;
 
         /// <summary>
         /// Gets the last modified time.
         /// </summary>
-        public System.DateTime LastModified { get; }
+        public System.DateTime LastModified { get; init; }
 
         /// <summary>
         /// Gets the file info.

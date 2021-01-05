@@ -7,9 +7,14 @@
 
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.5.0" />
+    <PackageReference Include="IsExternalInit" Version="1.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(DotNetVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetVersion)" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="$(DotNetVersion)" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(DotNetVersion)" />
+    <PackageReference Include="System.Collections.Immutable" Version="$(DotNetVersion)" />
   </ItemGroup>
 
 </Project>
