@@ -7,8 +7,12 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-
+  </PropertyGroup>
+  
+  <PropertyGroup Label="Versions">
     <DotNetVersion>5.0.0</DotNetVersion>
+    <HtmlAgilityPackVersion>1.11.29</HtmlAgilityPackVersion>
+    <SystemCommandLineHostingVersion>0.3.0-alpha.20574.7</SystemCommandLineHostingVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.612">
+    <PackageReference Include="Meziantou.Analyzer" Version="1.0.645">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

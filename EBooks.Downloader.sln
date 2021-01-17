@@ -13,6 +13,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Directory.Build.props = Directory.Build.props
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EBook.Downloader.Syncfusion", "EBook.Downloader.Syncfusion\EBook.Downloader.Syncfusion.csproj", "{1A1A5610-43B7-490A-A9E7-C8645942E4A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EBook.Downloader.Calibre", "EBook.Downloader.Calibre\EBook.Downloader.Calibre.csproj", "{B4961B97-185E-4BF6-AF86-A4F4241032D1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{82999C42-B5E8-49CD-A86F-8A3F34C074CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{82999C42-B5E8-49CD-A86F-8A3F34C074CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{82999C42-B5E8-49CD-A86F-8A3F34C074CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A1A5610-43B7-490A-A9E7-C8645942E4A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A1A5610-43B7-490A-A9E7-C8645942E4A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A1A5610-43B7-490A-A9E7-C8645942E4A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A1A5610-43B7-490A-A9E7-C8645942E4A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4961B97-185E-4BF6-AF86-A4F4241032D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4961B97-185E-4BF6-AF86-A4F4241032D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4961B97-185E-4BF6-AF86-A4F4241032D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4961B97-185E-4BF6-AF86-A4F4241032D1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

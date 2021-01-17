@@ -16,35 +16,13 @@ namespace EBook.Downloader.Common
     /// </summary>
     public class CalibreLibrary : IDisposable
     {
-        private const string DefaultCalibrePath = "%PROGRAMFILES%\\Calibre2";
-
         private const string TriggerName = "books_update_trg";
-
-        private const string SelectById = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book WHERE b.id = :id";
-
-        private const string SelectByIdentifier = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier LIMIT 1";
-
-        private const string SelectByIdentifierAndExtension = "SELECT b.id, b.path, d.name, b.last_modified FROM books b INNER JOIN data d ON b.id = d.book INNER JOIN identifiers i ON b.id = i.book WHERE i.type = :type AND i.val = :identifier AND d.format = :extension LIMIT 1";
-
-        private const string SelectDescriptionById = "SELECT text from comments where book = :id";
-
-        private const string SelectSeriesById = "SELECT s.name as series_name, b.series_index FROM books_series_link AS bsl INNER JOIN series AS S ON bsl.series = s.id INNER JOIN books as b ON bsl.book = b.id WHERE b.id = :id";
 
         private const string UpdateLastModifiedById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
 
         private readonly ILogger logger;
 
-        private readonly string calibreDbPath;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdCommand;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdentifierCommand;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectBookByIdentifierAndExtensionCommand;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectDescriptionCommand;
-
-        private readonly Microsoft.Data.Sqlite.SqliteCommand selectSeriesCommand;
+        private readonly Calibre.CalibreDb calibreDb;
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand updateLastModifiedCommand;
 
@@ -62,41 +40,15 @@ namespace EBook.Downloader.Common
         /// <param name="path">The path.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="calibrePath">The path to the calibre binaries.</param>
-        public CalibreLibrary(string path, ILogger logger, string calibrePath = DefaultCalibrePath)
+        public CalibreLibrary(string path, ILogger logger, string calibrePath = Calibre.CalibreDb.DefaultCalibrePath)
         {
             this.Path = path;
             this.logger = logger;
-            this.calibreDbPath = Environment.ExpandEnvironmentVariables(System.IO.Path.Combine(calibrePath, "calibredb.exe"));
+            this.calibreDb = new Calibre.CalibreDb(path, logger, calibrePath);
 
             var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db"), Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
             this.connection.Open();
-
-            this.selectBookByIdCommand = this.connection.CreateCommand();
-            this.selectBookByIdCommand.CommandText = SelectById;
-            this.selectBookByIdCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
-            this.selectBookByIdCommand.Prepare();
-
-            this.selectBookByIdentifierCommand = this.connection.CreateCommand();
-            this.selectBookByIdentifierCommand.CommandText = SelectByIdentifier;
-            this.selectBookByIdentifierCommand.Parameters.Add(":type", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdentifierCommand.Parameters.Add(":identifier", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdentifierCommand.Prepare();
-
-            this.selectBookByIdentifierAndExtensionCommand = this.connection.CreateCommand();
-            this.selectBookByIdentifierAndExtensionCommand.CommandText = SelectByIdentifierAndExtension;
-            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":type", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":identifier", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdentifierAndExtensionCommand.Parameters.Add(":extension", Microsoft.Data.Sqlite.SqliteType.Text);
-            this.selectBookByIdentifierAndExtensionCommand.Prepare();
-
-            this.selectDescriptionCommand = this.connection.CreateCommand();
-            this.selectDescriptionCommand.CommandText = SelectDescriptionById;
-            this.selectDescriptionCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
-
-            this.selectSeriesCommand = this.connection.CreateCommand();
-            this.selectSeriesCommand.CommandText = SelectSeriesById;
-            this.selectSeriesCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
             this.updateLastModifiedCommand = this.connection.CreateCommand();
             this.updateLastModifiedCommand.CommandText = UpdateLastModifiedById;
@@ -131,7 +83,7 @@ namespace EBook.Downloader.Common
         /// <param name="type">The type of identifier.</param>
         /// <param name="extension">The extension to check.</param>
         /// <returns>The book.</returns>
-        public async Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension)
+        public CalibreBook? GetBookByIdentifierAndExtension(string identifier, string type, string extension)
         {
             if (identifier is null)
             {
@@ -139,14 +91,7 @@ namespace EBook.Downloader.Common
             }
 
             // get the date time of the format
-            this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = type;
-            this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier;
-            this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = extension?.TrimStart('.').ToUpperInvariant() ?? "EPUB";
-
-            using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
-            return await reader.ReadAsync().ConfigureAwait(false)
-                ? new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) }
-                : default;
+            return this.GetCalibreBook(new Calibre.Identifier(type, identifier), extension?.TrimStart('.') ?? "EPUB");
         }
 
         /// <summary>
@@ -168,34 +113,13 @@ namespace EBook.Downloader.Common
 
             async Task<bool> AddOrUpdateInternalAsync(EpubInfo info, int maxTimeOffset)
             {
-                CalibreBook? book = default;
-
                 var identifier = info.Identifiers.First();
-                this.selectBookByIdentifierAndExtensionCommand.Parameters[":type"].Value = identifier.Key;
-                this.selectBookByIdentifierAndExtensionCommand.Parameters[":identifier"].Value = identifier.Value;
-                this.selectBookByIdentifierAndExtensionCommand.Parameters[":extension"].Value = info.Path.Extension.TrimStart('.').ToUpperInvariant();
-
-                using (var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false))
-                {
-                    if (await reader.ReadAsync().ConfigureAwait(false))
-                    {
-                        book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
-                    }
-                }
+                CalibreBook? book = this.GetCalibreBook(new Calibre.Identifier(identifier.Key, identifier.Value), info.Path.Extension.TrimStart('.'));
 
                 if (book is null)
                 {
                     // see if we need to add the book or add the format
-                    this.selectBookByIdentifierCommand.Parameters[":type"].Value = identifier.Key;
-                    this.selectBookByIdentifierCommand.Parameters[":identifier"].Value = identifier.Value;
-
-                    using (var reader = await this.selectBookByIdentifierCommand.ExecuteReaderAsync().ConfigureAwait(false))
-                    {
-                        if (await reader.ReadAsync().ConfigureAwait(false))
-                        {
-                            book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
-                        }
-                    }
+                    book = this.GetCalibreBook(new Calibre.Identifier(identifier.Key, identifier.Value));
 
                     if (book is null)
                     {
@@ -204,13 +128,13 @@ namespace EBook.Downloader.Common
                     else if (info.Path is not null)
                     {
                         // add this format
-                        this.ExecuteCalibreDb("add_format", FormattableString.Invariant($"--dont-replace {book.Id} \"{info.Path}\""));
+                        this.calibreDb.AddFormat(book.Id, info.Path, dontReplace: true);
                     }
 
                     if (book is not null && book.Path is not null && book.Name is not null && info.Path is not null)
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
-                        await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
+                        this.UpdateDescription(book.Id, info.LongDescription);
                         await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     }
 
@@ -239,8 +163,8 @@ namespace EBook.Downloader.Common
                         info.Path.CopyTo(fullPath, overwrite: true);
                     }
 
-                    await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
+                    this.UpdateDescription(book.Id, info.LongDescription);
+                    this.UpdateSeries(book.Id, info.SeriesName, info.SeriesIndex);
                     await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
@@ -249,11 +173,8 @@ namespace EBook.Downloader.Common
 
                 async Task<CalibreBook?> AddBookAsync(EpubInfo info)
                 {
-                    // add this book
-                    var coverFile = default(string);
-                    var args = $"--duplicates --languages eng \"{info.Path}\"";
-
                     // extract out the cover
+                    var coverFile = default(string);
                     using (var zipFile = System.IO.Compression.ZipFile.OpenRead(info.Path.FullName))
                     {
                         var coverEntry = zipFile.Entries.FirstOrDefault(entry => string.Equals(entry.Name, "cover.svg", StringComparison.Ordinal));
@@ -263,34 +184,28 @@ namespace EBook.Downloader.Common
                             using var zipStream = coverEntry.Open();
                             using var fileStream = System.IO.File.OpenWrite(coverFile);
                             await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
-                            args += $" --cover=\"{coverFile}\"";
                         }
                     }
 
+                    // sanitise the tags
+                    var tags = default(string);
                     if (info.Tags.Any())
                     {
-                        // sanitise the tags
                         var sanitisedTags = info.Tags
                             .SelectMany(tag => tag.Split(new[] { "--" }, StringSplitOptions.RemoveEmptyEntries))
                             .Select(tag => tag.Trim().Replace(",", ";"))
                             .Distinct(StringComparer.Ordinal);
-                        args += $" --tags=\"{string.Join(", ", sanitisedTags)}\"";
+                        tags = string.Join(", ", sanitisedTags);
                     }
 
                     // we need to add this
-                    this.ExecuteCalibreDb("add", args);
+                    var bookId = this.calibreDb.Add(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags);
                     if (coverFile != default && System.IO.File.Exists(coverFile))
                     {
                         System.IO.File.Delete(coverFile);
                     }
 
-                    using var reader = await this.selectBookByIdentifierAndExtensionCommand.ExecuteReaderAsync().ConfigureAwait(false);
-                    if (await reader.ReadAsync().ConfigureAwait(false))
-                    {
-                        return new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
-                    }
-
-                    return default;
+                    return this.GetCalibreBook(bookId);
                 }
 
                 static bool CheckFiles(System.IO.FileInfo source, string destination, ILogger logger)
@@ -370,16 +285,11 @@ namespace EBook.Downloader.Common
 
             async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset)
             {
-                if (await this.UpdateDescriptionAsync(book.Id, longDescription).ConfigureAwait(false)
-                    || await this.UpdateSeriesAsync(book.Id, seriesName, seriesIndex).ConfigureAwait(false))
+                if ((this.UpdateDescription(book.Id, longDescription)
+                    || this.UpdateSeries(book.Id, seriesName, seriesIndex)) && this.GetCalibreBook(book.Id) is CalibreBook processed)
                 {
                     // refresh the book with the last data
-                    this.selectBookByIdCommand.Parameters[":id"].Value = book.Id;
-                    using var reader = await this.selectBookByIdCommand.ExecuteReaderAsync().ConfigureAwait(false);
-                    if (await reader.ReadAsync().ConfigureAwait(false))
-                    {
-                        book = new CalibreBook(reader.GetString(3)) { Id = reader.GetInt32(0), Name = reader.GetString(2), Path = reader.GetString(1) };
-                    }
+                    book = processed;
                 }
 
                 await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset).ConfigureAwait(false);
@@ -415,11 +325,6 @@ namespace EBook.Downloader.Common
             {
                 if (disposing)
                 {
-                    this.selectBookByIdCommand?.Dispose();
-                    this.selectBookByIdentifierCommand?.Dispose();
-                    this.selectBookByIdentifierAndExtensionCommand?.Dispose();
-                    this.selectDescriptionCommand?.Dispose();
-                    this.selectSeriesCommand?.Dispose();
                     this.updateLastModifiedCommand?.Dispose();
                     this.dropTriggerCommand?.Dispose();
                     this.createTriggerCommand?.Dispose();
@@ -430,15 +335,21 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private async Task<bool> UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription)
+        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document) => document
+            .RootElement
+            .EnumerateArray()
+            .Select(json => new CalibreBook(json))
+            .SingleOrDefault();
+
+        private bool UpdateDescription(int id, System.Xml.XmlElement? longDescription)
         {
             if (longDescription is null)
             {
                 return false;
             }
 
-            this.selectDescriptionCommand.Parameters[":id"].Value = id;
-            var currentDescription = SanitiseHtml(await this.selectDescriptionCommand.ExecuteScalarAsync().ConfigureAwait(false) as string);
+            var json = this.calibreDb.List(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\"")).RootElement.EnumerateArray().First();
+            var currentDescription = SanitiseHtml(json.GetProperty("comments").GetString());
             var newDescription = SanitiseHtml(longDescription.OuterXml);
             if (string.Equals(currentDescription, newDescription, StringComparison.Ordinal))
             {
@@ -447,7 +358,7 @@ namespace EBook.Downloader.Common
 
             // execute calibredb to update the description
             this.logger.LogInformation("Updating description to the long description");
-            this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field comments:\"{newDescription}\""));
+            this.calibreDb.SetMetadata(id, "comments", newDescription);
             return true;
 
             static string? SanitiseHtml(string? html)
@@ -463,52 +374,52 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex)
+        private bool UpdateSeries(int id, string? seriesName, float seriesIndex)
         {
-            var (currentSeriesName, currentSeriesIndex) = await GetCurrentSeries().ConfigureAwait(false);
+            var (currentSeriesName, currentSeriesIndex) = GetCurrentSeries();
             if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && (seriesName is null || currentSeriesIndex == seriesIndex))
             {
                 // neither have a series, or the indexes match in the same series.
                 return false;
             }
 
+            (string Field, object? Value)[]? fields = default;
             if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && seriesName is null)
             {
                 // execute calibredb to clear the series
                 this.logger.LogInformation("Clearing series");
-                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\" --field series_index:\"{1}\""));
+                fields = new (string, object?)[] { ("series", seriesName) };
             }
             else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
                 this.logger.LogInformation("Updating series and index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\" --field series_index:\"{seriesIndex}\""));
+                fields = new (string, object?)[] { ("series", seriesName), ("series_index", seriesIndex) };
             }
             else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex == seriesIndex)
             {
                 // execute calibredb to update the series
-                this.logger.LogInformation("Updating series to {Series}:{Series}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series:\"{seriesName}\""));
+                this.logger.LogInformation("Updating series to {Series}:{SeriesIndex}", seriesName, seriesIndex);
+                fields = new (string, object?)[] { ("series", seriesName) };
             }
             else if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
             {
                 // execute calibredb to update the series index
                 this.logger.LogInformation("Updating series index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                this.ExecuteCalibreDb("set_metadata", FormattableString.Invariant($"{id} --field series_index:\"{seriesIndex}\""));
+                fields = new (string, object?)[] { ("series_index", seriesIndex) };
+            }
+
+            if (fields is not null)
+            {
+                this.calibreDb.SetMetadata(id, fields.ToLookup(_ => _.Field, _ => _.Value, StringComparer.OrdinalIgnoreCase));
             }
 
             return true;
 
-            async Task<(string?, float)> GetCurrentSeries()
+            (string?, float) GetCurrentSeries()
             {
-                this.selectSeriesCommand.Parameters[":id"].Value = id;
-                using var reader = await this.selectSeriesCommand.ExecuteReaderAsync().ConfigureAwait(false);
-                if (await reader.ReadAsync().ConfigureAwait(false))
-                {
-                    return (reader.GetString(0), reader.GetFloat(1));
-                }
-
-                return (default, 1F);
+                var json = this.calibreDb.List(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\"")).RootElement.EnumerateArray().First();
+                return (json.TryGetProperty("series", out var seriesProperty) ? seriesProperty.GetString() : default, json.GetProperty("series_index").GetSingle());
             }
         }
 
@@ -542,47 +453,12 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private void ExecuteCalibreDb(string command, string arguments, System.Diagnostics.DataReceivedEventHandler? outputDataReceived = default)
-        {
-            var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
-            this.logger.LogDebug(fullArguments);
+        private CalibreBook? GetCalibreBook(int id) => this.GetCalibreBook(FormattableString.Invariant($"id:\"={id}\""));
 
-            var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
+        private CalibreBook? GetCalibreBook(Calibre.Identifier identifier) => this.GetCalibreBook($"identifier:\"={identifier}\"");
 
-            using var process = new System.Diagnostics.Process { StartInfo = processStartInfo };
+        private CalibreBook? GetCalibreBook(Calibre.Identifier identifier, string format) => this.GetCalibreBook($"identifier:\"={identifier}\" and formats:\"{format}\"");
 
-            void DefaultOutputDataReceived(object sender, System.Diagnostics.DataReceivedEventArgs args)
-            {
-                if (args?.Data is null)
-                {
-                    return;
-                }
-
-                this.logger.LogInformation(0, args.Data);
-            }
-
-            process.OutputDataReceived += outputDataReceived ?? DefaultOutputDataReceived;
-
-            process.ErrorDataReceived += (sender, args) =>
-            {
-                if (args?.Data is null)
-                {
-                    return;
-                }
-
-                this.logger.LogError(0, args.Data);
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            process.WaitForExit();
-        }
+        private CalibreBook? GetCalibreBook(string searchPattern) => GetCalibreBook(this.calibreDb.List(new[] { "id", "formats", "last_modified" }, searchPattern: searchPattern));
     }
 }

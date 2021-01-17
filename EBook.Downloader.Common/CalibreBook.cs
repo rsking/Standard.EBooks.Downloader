@@ -6,11 +6,26 @@
 
 namespace EBook.Downloader.Common
 {
+    using System.Linq;
+
     /// <summary>
     /// EPUB information.
     /// </summary>
     public record CalibreBook
     {
+        /// <summary>
+        /// Initialises a new instance of the <see cref="CalibreBook"/> class.
+        /// </summary>
+        /// <param name="element">The element.</param>
+        public CalibreBook(System.Text.Json.JsonElement element)
+        {
+            this.Id = element.GetProperty("id").GetInt32();
+            var file = new System.IO.FileInfo(element.GetProperty("formats").EnumerateArray().First().GetString());
+            this.Name = file.Name.Substring(0, file.Name.Length - file.Extension.Length);
+            this.Path = $"{file.Directory.Parent.Name}{System.IO.Path.AltDirectorySeparatorChar}{file.Directory.Name}";
+            this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
+        }
+
         /// <summary>
         /// Initialises a new instance of the <see cref="CalibreBook" /> class.
         /// </summary>
@@ -43,6 +58,6 @@ namespace EBook.Downloader.Common
         /// <param name="path">The base path.</param>
         /// <param name="extension">The extension.</param>
         /// <returns>The file info for the book.</returns>
-        public string GetFullPath(string path, string extension) => System.IO.Path.Combine(path, this.Path, $"{this.Name}{extension}");
+        public string GetFullPath(string path, string extension) => System.IO.Path.Combine(path, this.Path, this.Name + extension);
     }
 }

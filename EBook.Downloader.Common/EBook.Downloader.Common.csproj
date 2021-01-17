@@ -17,4 +17,8 @@
     <PackageReference Include="System.Collections.Immutable" Version="$(DotNetVersion)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\EBook.Downloader.Calibre\EBook.Downloader.Calibre.csproj" />
+  </ItemGroup>
+
 </Project>

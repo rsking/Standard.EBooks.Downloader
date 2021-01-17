@@ -35,6 +35,7 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder")
     .AddOption(new Option<bool>(new[] { "-c", "--check-metadata" }, "Whether to check the metadata"))
     .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
     .AddOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
+    .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
         configureHost =>
@@ -53,7 +54,10 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder")
                     .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }));
         });
 
-return await builder.Build().InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray()).ConfigureAwait(false);
+return await builder
+    .Build()
+    .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
+    .ConfigureAwait(false);
 
 static async Task Process(
     IHost host,
@@ -91,7 +95,7 @@ static async Task Process(
     if (!System.IO.File.Exists(sentinelPath))
     {
         await System.IO.File.WriteAllBytesAsync(sentinelPath, Array.Empty<byte>()).ConfigureAwait(false);
-        System.IO.File.SetLastWriteTimeUtc(sentinelPath, DateTime.MinValue.ToUniversalTime());
+        System.IO.File.SetLastWriteTimeUtc(sentinelPath, new System.DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc));
     }
 
     var sentinelDateTime = resync
@@ -118,7 +122,7 @@ static async Task Process(
             // get the date time
             var extension = uri.GetExtension();
             var kepub = string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
-            var book = await calibreLibrary.GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension).ConfigureAwait(false);
+            var book = calibreLibrary.GetBookByIdentifierAndExtension(item.Id, "url", extension);
             var lastWriteTimeUtc = DateTime.MinValue;
             if (book is not null)
             {
