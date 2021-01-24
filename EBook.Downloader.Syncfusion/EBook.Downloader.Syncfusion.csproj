@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HtmlAgilityPack" Version="$(HtmlAgilityPackVersion)" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="$(DotNetVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(DotNetVersion)" />
+    <PackageReference Include="Serilog.AspNetCore" Version="3.4.0" />
+    <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
+    <PackageReference Include="System.CommandLine.Hosting" Version="$(SystemCommandLineHostingVersion)" />
+    <PackageReference Include="System.Linq.Async" Version="$(DotNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EBook.Downloader.Common\EBook.Downloader.Common.csproj" />
+  </ItemGroup>
+
+</Project>
