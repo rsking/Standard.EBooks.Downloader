@@ -6,8 +6,6 @@
 
 namespace EBook.Downloader.Standard.EBooks
 {
-    using System.Linq;
-
     /// <summary>
     /// Extension methods.
     /// </summary>

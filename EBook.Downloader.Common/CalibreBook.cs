@@ -58,6 +58,20 @@ namespace EBook.Downloader.Common
         /// <param name="path">The base path.</param>
         /// <param name="extension">The extension.</param>
         /// <returns>The file info for the book.</returns>
-        public string GetFullPath(string path, string extension) => System.IO.Path.Combine(path, this.Path, this.Name + extension);
+        public string GetFullPath(string path, string extension)
+        {
+            var paths = GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension));
+            return System.IO.Path.Combine(paths.ToArray());
+
+            static System.Collections.Generic.IEnumerable<string> GetEnumerable(string value)
+            {
+                yield return value;
+            }
+
+            static System.Collections.Generic.IEnumerable<string> GetPathsSegments(string path)
+            {
+                return path.Split(System.IO.Path.AltDirectorySeparatorChar);
+            }
+        }
     }
 }

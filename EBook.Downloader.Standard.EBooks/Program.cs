@@ -4,7 +4,6 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-#pragma warning disable SA1200 // Using directives should be placed correctly
 using System;
 using System.CommandLine;
 using System.CommandLine.Builder;
@@ -19,7 +18,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
-#pragma warning restore SA1200 // Using directives should be placed correctly
 
 const int SentinelRetryCount = 30;
 
@@ -29,7 +27,7 @@ const int MaxTimeOffset = 180;
 
 const string AtomUrl = "https://standardebooks.org/opds/all";
 
-var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int>(Process) })
+var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
     .AddOption(new Option<bool>(new[] { "-c", "--check-metadata" }, "Whether to check the metadata"))
@@ -38,21 +36,18 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloder")
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
-        configureHost =>
-        {
-            configureHost
-                .UseSerilog((_, loggerConfiguration) => loggerConfiguration
-                    .WriteTo
-                    .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
-                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
-                    .Enrich.WithThreadId())
-                .ConfigureServices((_, services) => services
-                    .AddHttpClient(string.Empty)
-                    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
-                    .Services
-                    .AddHttpClient("header")
-                    .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }));
-        });
+        configureHost => configureHost
+            .UseSerilog((_, loggerConfiguration) => loggerConfiguration
+                .WriteTo
+                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
+                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
+                .Enrich.WithThreadId())
+            .ConfigureServices((_, services) => services
+                .AddHttpClient(string.Empty)
+                .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
+                .Services
+                .AddHttpClient("header")
+                .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })));
 
 return await builder
     .Build()
@@ -122,7 +117,9 @@ static async Task Process(
             // get the date time
             var extension = uri.GetExtension();
             var kepub = string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
-            var book = calibreLibrary.GetBookByIdentifierAndExtension(item.Id, "url", extension);
+            var book = await calibreLibrary
+                .GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension)
+                .ConfigureAwait(false);
             var lastWriteTimeUtc = DateTime.MinValue;
             if (book is not null)
             {
