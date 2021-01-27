@@ -336,11 +336,23 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document) => document
+        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document, System.Func<System.Text.Json.JsonElement, bool> predicate) => document
             .RootElement
             .EnumerateArray()
+            .Where(predicate)
             .Select(json => new CalibreBook(json))
             .SingleOrDefault();
+
+        private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier)
+        {
+            var identifierValue = element.GetProperty("identifiers").GetProperty(identifier.Name).ToString();
+            if (identifierValue is null)
+            {
+                return false;
+            }
+
+            return identifierValue.Equals(identifier.Value.ToString(), StringComparison.Ordinal);
+        }
 
         private async Task<bool> UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription)
         {
@@ -456,12 +468,12 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private Task<CalibreBook?> GetCalibreBookAsync(int id) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""));
+        private Task<CalibreBook?> GetCalibreBookAsync(int id) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""), _ => true);
 
-        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"");
+        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier));
 
-        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"");
+        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier));
 
-        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "formats", "last_modified" }, searchPattern: searchPattern).ConfigureAwait(false));
+        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "formats", "last_modified", "identifiers" }, searchPattern: searchPattern).ConfigureAwait(false), predicate);
     }
 }
