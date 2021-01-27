@@ -66,21 +66,21 @@ static async Task Process(
     }).ToArray();
 
     var clientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
-    foreach (var book in books)
+    foreach (var (id, title, uri, isbn) in books)
     {
-        if (book.Uri is null)
+        if (uri is null)
         {
-            logger.LogError("{Title} does not have a URI", book.Title);
+            logger.LogError("{Title} does not have a URI", title);
             continue;
         }
 
         // download the web page
-        var html = await book.Uri.DownloadAsStringAsync(clientFactory).ConfigureAwait(false);
+        var html = await uri.DownloadAsStringAsync(clientFactory).ConfigureAwait(false);
         var document = new HtmlAgilityPack.HtmlDocument();
         document.LoadHtml(html);
 
         var detailsSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("details-section"));
-        string? isbn = default;
+        string? actualIsbn = default;
         System.DateTime? publishedOn = default;
         if (detailsSections is not null)
         {
@@ -99,19 +99,19 @@ static async Task Process(
                     {
                         if (string.Equals(header, "isbn", System.StringComparison.OrdinalIgnoreCase))
                         {
-                            isbn = detail.InnerText.Replace("-", string.Empty);
+                            actualIsbn = detail.InnerText.Replace("-", string.Empty, System.StringComparison.OrdinalIgnoreCase);
                         }
                         else if (string.Equals(header, "published on", System.StringComparison.OrdinalIgnoreCase))
                         {
-                            var text = detail.InnerText.Replace("Published on: ", string.Empty);
+                            var text = detail.InnerText.Replace("Published on: ", string.Empty, System.StringComparison.OrdinalIgnoreCase);
 
-                            if (System.DateTime.TryParse(text, out var parsed))
+                            if (System.DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
                             {
                                 publishedOn = parsed;
                             }
                             else
                             {
-                                publishedOn = System.DateTime.Parse(text);
+                                publishedOn = System.DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
                             }
                         }
 
@@ -122,19 +122,17 @@ static async Task Process(
         }
 
         var fields = new System.Collections.Generic.List<(string Field, object? Value)>();
-        if (isbn is not null && !string.Equals(book.Isbn, isbn, System.StringComparison.Ordinal))
+        if (actualIsbn is not null && !string.Equals(isbn, actualIsbn, System.StringComparison.Ordinal))
         {
-            fields.Add(("identifiers", new Identifier("isbn", isbn)));
-            fields.Add(("identifiers", new Identifier("uri", book.Uri)));
+            fields.Add(("identifiers", new Identifier("isbn", actualIsbn)));
+            fields.Add(("identifiers", new Identifier("uri", uri)));
         }
 
         if (fields.Count > 0)
         {
             await calibreDb
-                .SetMetadataAsync(book.Id, fields.ToLookup(field => field.Field, field => field.Value))
+                .SetMetadataAsync(id, fields.ToLookup(field => field.Field, field => field.Value, System.StringComparer.Ordinal))
                 .ConfigureAwait(false);
         }
-
-        //var detailsSections = document.DocumentNode.SelectNodes("//div[@class='details-section']");
     }
 }
