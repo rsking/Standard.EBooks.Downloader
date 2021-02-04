@@ -162,17 +162,6 @@ namespace EBook.Downloader.Calibre
         /// <returns>The IDs.</returns>
         public async IAsyncEnumerable<int> SearchAsync(string searchExpression)
         {
-            static string GetParentDirectoryExists(string localPath)
-            {
-                var parentDirectory = System.IO.Directory.GetParent(localPath);
-                while (parentDirectory is { Exists: false })
-                {
-                    parentDirectory = parentDirectory.Parent;
-                }
-
-                return parentDirectory.FullName;
-            }
-
             var results = new List<int>();
             await this.ExecuteCalibreDbAsync("search", searchExpression, data =>
             {
