@@ -23,7 +23,7 @@ var tagsCommandBuilder = new CommandBuilder(new Command("tags") { Handler = Comm
 var builder = new CommandLineBuilder(new RootCommand("Calibre EBook Maintenence"))
     .AddCommand(tagsCommandBuilder.Command)
     .UseDefaults()
-    .UseHost();
+    .UseHost(Host.CreateDefaultBuilder, builder => builder.ConfigureServices(services => services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true)));
 
 return await builder
     .Build()
@@ -57,28 +57,18 @@ static async Task Tags(
             static string ToProperCaseImpl(string strX, char separator, System.Globalization.TextInfo textInfo)
             {
                 var words = new System.Collections.Generic.List<string>();
+                var split = strX.Trim().Split(separator);
+                const int first = 0;
+                var last = split.Length - 1;
 
-                foreach (var word in strX.Trim().Split(separator).Select(w => w.Trim()))
+                foreach (var (word, index) in split.Select((w, i) => (word: w.Trim(), index: i)))
                 {
-                    if (words.Count > 0)
+                    if (index != first
+                        && index != last
+                        && EBook.Downloader.Maintenance.Words.LowerCase.Contains(word, StringComparer.OrdinalIgnoreCase))
                     {
-                        if (string.Equals(word, "a", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "for", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "of", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "and", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "in", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "the", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "it", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "it", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "it's", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "as", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "to", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "ca.", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(word, "into", StringComparison.OrdinalIgnoreCase))
-                        {
-                            words.Add(textInfo.ToLower(word));
-                            continue;
-                        }
+                        words.Add(textInfo.ToLower(word));
+                        continue;
                     }
 
                     if (word.Contains('-', StringComparison.Ordinal))
@@ -119,13 +109,13 @@ static async Task Tags(
 
     static (string Name, string? Character) Split(string value)
     {
-        var index = value.IndexOf('(');
+        var index = value.IndexOf('(', StringComparison.Ordinal);
         if (index == -1)
         {
             return (value, default);
         }
 
-        return (value.Substring(0, index - 1), value.Substring(index));
+        return (value.Substring(0, index - 1), value[index..]);
     }
 
     static string Join(string name, string? character)

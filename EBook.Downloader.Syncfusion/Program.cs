@@ -21,14 +21,20 @@ var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater")
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
-        configureHost => configureHost
-            .UseSerilog((_, loggerConfiguration) => loggerConfiguration
-                .WriteTo
-                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
-                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
-                .Enrich.WithThreadId())
-            .ConfigureServices((_, services) => services
-                .AddHttpClient(string.Empty)));
+        configureHost =>
+        {
+            configureHost
+                .UseSerilog((_, loggerConfiguration) => loggerConfiguration
+                    .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
+                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
+                    .Enrich.WithThreadId());
+            configureHost
+                .ConfigureServices((_, services) =>
+                {
+                    services.AddHttpClient(string.Empty);
+                    services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
+                });
+        });
 
 return await builder
     .Build()

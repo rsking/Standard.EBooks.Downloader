@@ -169,19 +169,28 @@ namespace EBook.Downloader.Calibre
         public async IAsyncEnumerable<int> SearchAsync(string searchExpression)
         {
             var results = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            var end = false;
             var resetEvent = new AsyncManualResetEvent();
 
-            var task = this.ExecuteCalibreDbAsync("search", searchExpression, data =>
-            {
-                if (Preprocess(data) is string { Length: > 0 } processedData)
+            var task = this.ExecuteCalibreDbAsync(
+                "search",
+                searchExpression,
+                data =>
                 {
-                    foreach (var result in processedData.Split(',').Select(value => value.Trim()).Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)))
+                    if (Preprocess(data) is string { Length: > 0 } processedData)
                     {
-                        results.Enqueue(result);
-                        resetEvent.Set();
+                        foreach (var result in processedData.Split(',').Select(value => value.Trim()).Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)))
+                        {
+                            results.Enqueue(result);
+                            resetEvent.Set();
+                        }
                     }
-                }
-            });
+                },
+                complete: () =>
+                {
+                    end = true;
+                    resetEvent.Set();
+                });
 
             do
             {
@@ -193,7 +202,7 @@ namespace EBook.Downloader.Calibre
 
                 resetEvent.Reset();
             }
-            while (!task.IsCompleted);
+            while (!end);
         }
 
         /// <summary>
@@ -280,6 +289,7 @@ namespace EBook.Downloader.Calibre
 
             bool hasHeader = false;
             var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var end = false;
             var resetEvent = new AsyncManualResetEvent();
 
             var execureCalibreDbTask = this.ExecuteCalibreDbAsync(
@@ -304,6 +314,7 @@ namespace EBook.Downloader.Calibre
                 },
                 () =>
                 {
+                    end = true;
                     resetEvent.Set();
                 });
 
@@ -342,7 +353,7 @@ namespace EBook.Downloader.Calibre
 
                 resetEvent.Reset();
             }
-            while (!execureCalibreDbTask.IsCompleted);
+            while (!end);
 
             static string? GetLastItem(string?[] items)
             {

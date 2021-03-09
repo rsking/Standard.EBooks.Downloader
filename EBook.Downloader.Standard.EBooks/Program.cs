@@ -36,19 +36,32 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader"
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
-        configureHost => configureHost
-            .UseSerilog((_, loggerConfiguration) => loggerConfiguration
-                .WriteTo
-                .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
-                .WriteTo.Debug()
-                .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
-                .Enrich.WithThreadId())
-            .ConfigureServices((_, services) => services
-                .AddHttpClient(string.Empty)
-                .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30))
-                .Services
-                .AddHttpClient("header")
-                .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None })));
+        configureHost =>
+        {
+            configureHost
+                .UseSerilog((_, loggerConfiguration) =>
+                {
+                    loggerConfiguration
+                        .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}");
+                    loggerConfiguration
+                        .WriteTo.Debug()
+                        .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
+                        .Enrich.WithThreadId();
+                });
+            configureHost
+                .ConfigureServices((_, services) =>
+                {
+                    services
+                        .AddHttpClient(string.Empty)
+                        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
+                    services
+                        .AddHttpClient("header")
+                        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
+
+                    services
+                        .Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
+                });
+        });
 
 return await builder
     .Build()

@@ -60,6 +60,24 @@
             "console": "externalTerminal",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
+        },    
+        {
+            "name": "Check Tags",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/EBook.Downloader.Maintenance/bin/Debug/net5.0/EBook.Downloader.Maintenance.dll",
+            "args": [
+                "tags",
+                "%OneDriveConsumer%\\Books"
+            ],
+            "env": {
+                "DOTNET_ENVIRONMENT" : "Development"
+            },
+            "cwd": "${workspaceFolder}/EBook.Downloader.Maintenance",
+            "console": "externalTerminal",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }
