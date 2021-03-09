@@ -40,6 +40,7 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader"
             .UseSerilog((_, loggerConfiguration) => loggerConfiguration
                 .WriteTo
                 .Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
+                .WriteTo.Debug()
                 .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
                 .Enrich.WithThreadId())
             .ConfigureServices((_, services) => services
@@ -146,7 +147,7 @@ static async Task Process(
             }
             else
             {
-                programLogger.LogInformation("{Title} - {Name} does not exist in Calibre", item.Title.Text, name);
+                programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
             }
 
             var actualUri = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory, url =>

@@ -19,7 +19,6 @@
                 "DOTNET_ENVIRONMENT" : "Development"
             },
             "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
-            // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
             "console": "externalTerminal",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"
@@ -41,7 +40,23 @@
                 "DOTNET_ENVIRONMENT" : "Development"
             },
             "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
-            // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
+            "console": "externalTerminal",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
+        },    
+        {
+            "name": "Run Syncfusion",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/EBook.Downloader.Syncfusion/bin/Debug/net5.0/EBook.Downloader.Syncfusion.dll",
+            "args": [
+                "%OneDriveConsumer%\\Books"
+            ],
+            "env": {
+                "DOTNET_ENVIRONMENT" : "Development"
+            },
+            "cwd": "${workspaceFolder}/EBook.Downloader.Syncfusion",
             "console": "externalTerminal",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart"

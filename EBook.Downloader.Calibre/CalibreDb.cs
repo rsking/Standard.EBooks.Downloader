@@ -20,6 +20,12 @@ namespace EBook.Downloader.Calibre
         /// </summary>
         public const string DefaultCalibrePath = "%PROGRAMFILES%\\Calibre2";
 
+        private const char QuoteChar = '\"';
+
+        private const string QuoteString = "\"";
+
+        private const string EscapedQuoteString = QuoteString + QuoteString;
+
         private const string DefaultSeparator = " ";
 
         private const int DefaultLineWidth = -1;
@@ -162,19 +168,32 @@ namespace EBook.Downloader.Calibre
         /// <returns>The IDs.</returns>
         public async IAsyncEnumerable<int> SearchAsync(string searchExpression)
         {
-            var results = new List<int>();
-            await this.ExecuteCalibreDbAsync("search", searchExpression, data =>
+            var results = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            var resetEvent = new AsyncManualResetEvent();
+
+            var task = this.ExecuteCalibreDbAsync("search", searchExpression, data =>
             {
                 if (Preprocess(data) is string { Length: > 0 } processedData)
                 {
-                    results.AddRange(processedData.Split(',').Select(value => value.Trim()).Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)));
+                    foreach (var result in processedData.Split(',').Select(value => value.Trim()).Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)))
+                    {
+                        results.Enqueue(result);
+                        resetEvent.Set();
+                    }
                 }
-            }).ConfigureAwait(false);
+            });
 
-            foreach (var result in results)
+            do
             {
-                yield return result;
+                await resetEvent.WaitAsync().ConfigureAwait(false);
+                while (results.TryDequeue(out var result))
+                {
+                    yield return result;
+                }
+
+                resetEvent.Reset();
             }
+            while (!task.IsCompleted);
         }
 
         /// <summary>
@@ -226,7 +245,12 @@ namespace EBook.Downloader.Calibre
         {
             const int BufferSize = 4096;
             using var memoryStream = new System.IO.MemoryStream(BufferSize);
-            using (var writer = new System.IO.StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true))
+            var writer = new System.IO.StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true);
+#if NETSTANDARD2_0
+            using (writer)
+#else
+            await using (writer)
+#endif
             {
                 await this.ExecuteCalibreDbAsync("show_metadata", FormattableString.Invariant($"{id} --as-opf"), data =>
                 {
@@ -242,6 +266,96 @@ namespace EBook.Downloader.Calibre
             return (Opf.Package)xmlSerializer.Deserialize(memoryStream);
         }
 
+        /// <summary>
+        /// Performs the 'show_categories' function.
+        /// </summary>
+        /// <returns>The categories.</returns>
+        public async IAsyncEnumerable<Category> ListCategories()
+        {
+            var stringBuilder = new StringBuilder();
+            stringBuilder
+                .Append(" --csv");
+            var command = stringBuilder.ToString();
+            stringBuilder.Length = 0;
+
+            bool hasHeader = false;
+            var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var resetEvent = new AsyncManualResetEvent();
+
+            var execureCalibreDbTask = this.ExecuteCalibreDbAsync(
+                "list_categories",
+                command,
+                data =>
+                {
+                    if (Preprocess(data) is string value)
+                    {
+                        if (!hasHeader)
+                        {
+                            hasHeader = true;
+                            return;
+                        }
+
+                        if (value is not null)
+                        {
+                            lines.Enqueue(value);
+                            resetEvent.Set();
+                        }
+                    }
+                },
+                () =>
+                {
+                    resetEvent.Set();
+                });
+
+            string?[]? values = default;
+            do
+            {
+                await resetEvent.WaitAsync().ConfigureAwait(false);
+                while (lines.TryDequeue(out var line))
+                {
+                    string? lastItem = default;
+                    if (values is null)
+                    {
+                        values = ProcessStrings(line, ',', combining: false);
+                        lastItem = GetLastItem(values);
+                    }
+                    else
+                    {
+                        lastItem = UpdateValues(ref values, GetLastItem(values), ProcessStrings(line, ',', combining: true));
+                    }
+
+                    if (CheckStartQuote(lastItem) && !CheckEndQuote(lastItem))
+                    {
+                        continue;
+                    }
+
+                    CleanValues(values);
+
+                    yield return new Category(
+                        (CategoryType)Enum.Parse(typeof(CategoryType), values[0]?.Trim('#'), ignoreCase: true),
+                        values[1]!,
+                        int.Parse(values[2], System.Globalization.CultureInfo.InvariantCulture),
+                        float.Parse(values[3], System.Globalization.CultureInfo.InvariantCulture));
+
+                    values = default;
+                }
+
+                resetEvent.Reset();
+            }
+            while (!execureCalibreDbTask.IsCompleted);
+
+            static string? GetLastItem(string?[] items)
+            {
+                return
+#if NETSTANDARD2_0
+                    items[items.Length - 1];
+#else
+                    items[^1];
+#endif
+
+            }
+        }
+
         private static string? Preprocess(string? line)
         {
             if (line is null)
@@ -249,17 +363,196 @@ namespace EBook.Downloader.Calibre
                 return default;
             }
 
+#if NETSTANDARD2_0
             if (line.Contains(IntegrationStatus))
             {
                 line = line
                     .Replace(IntegrationStatusTrue, string.Empty)
                     .Replace(IntegrationStatusFalse, string.Empty);
             }
+#else
+            if (line.Contains(IntegrationStatus, StringComparison.Ordinal))
+            {
+                line = line
+                    .Replace(IntegrationStatusTrue, string.Empty, StringComparison.Ordinal)
+                    .Replace(IntegrationStatusFalse, string.Empty, StringComparison.Ordinal);
+            }
+#endif
 
             return line.Trim();
         }
 
-        private static string? QuoteIfRequired(string? value) => value is not null && value.Contains(' ') ? string.Concat("\"", value, "\"") : value;
+        private static string? QuoteIfRequired(string? value) => value is not null
+#if NETSTANDARD2_0
+            && value.Contains(' ')
+#else
+            && value.Contains(' ', StringComparison.Ordinal)
+#endif
+            ? string.Concat("\"", value, "\"") : value;
+
+        private static string?[] ProcessStrings(string value, char delimiter, bool combining)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+
+            // work through each one
+            var splitIndicies = new List<int>();
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (value[i] == delimiter)
+                {
+                    if (!combining)
+                    {
+                        splitIndicies.Add(i);
+                    }
+                }
+                else if (value[i] == QuoteChar)
+                {
+                    combining = !combining;
+                }
+            }
+
+            var returnArray = new string[splitIndicies.Count + 1];
+            var returnIndex = 0;
+            var lastIndex = 0;
+
+            foreach (var index in splitIndicies)
+            {
+                var length = index - lastIndex;
+                returnArray[returnIndex] = value.Substring(lastIndex, length);
+                lastIndex = index + 1;
+                returnIndex++;
+            }
+
+            returnArray[returnIndex] =
+#if NETSTANDARD2_0
+                value.Substring(lastIndex, value.Length - lastIndex);
+#else
+                value[lastIndex..];
+#endif
+            returnIndex++;
+
+            // resize the array
+            if (returnArray.Length != returnIndex)
+            {
+                Array.Resize(ref returnArray, returnIndex);
+            }
+
+            return returnArray;
+        }
+
+        private static bool CheckStartQuote(string? value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+
+            // check the number of quotes at the start
+            var end = 0;
+            for (; end < value.Length; end++)
+            {
+                if (value[end] != QuoteChar)
+                {
+                    break;
+                }
+            }
+
+            return end % 2 != 0;
+        }
+
+        private static bool CheckEndQuote(string? value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+
+            // check the number of quotes at the end
+            var start = 0;
+            for (; start < value.Length; start++)
+            {
+                if (value[value.Length - 1 - start] != QuoteChar)
+                {
+                    break;
+                }
+            }
+
+            return start % 2 != 0;
+        }
+
+        private static void CleanValues(string?[] values)
+        {
+            // clean up any extraneous quotes
+            for (var i = 0; i < values.Length; i++)
+            {
+                // we can assume that if the string starts/ends with a quote, then these are single quotes
+                // as if there are any escaped quotes in the string, then it must be quoted.
+                var value = values[i];
+                if (value is null || string.IsNullOrEmpty(value))
+                {
+                    // set this to null, as it was an empty, unquoted string.
+                    values[i] = null;
+                    continue;
+                }
+
+                var start = 0;
+                if (value.Length > 0 && value[start] == QuoteChar)
+                {
+                    start++;
+                }
+
+                var end = value.Length - 1;
+                if (value.Length > 0 && value[end] == QuoteChar)
+                {
+                    end--;
+                }
+
+                var length = end - start + 1;
+                if (length != value.Length)
+                {
+                    value = length <= 0 ? string.Empty : value.Substring(start, length);
+                }
+
+#if NETSTANDARD2_0
+                values[i] = value.Replace(EscapedQuoteString, QuoteString);
+#else
+                values[i] = value.Replace(EscapedQuoteString, QuoteString, StringComparison.Ordinal);
+#endif
+            }
+        }
+
+        private static string? UpdateValues(ref string?[] values, string? lastItem, string?[] split)
+        {
+#if NETSTANDARD2_0
+            values[values.Length - 1]
+#else
+            values[^1]
+#endif
+                = lastItem + Environment.NewLine + split[0];
+
+            // resize the array
+            if (split.Length > 1)
+            {
+                var index = values.Length;
+                Array.Resize(ref values, values.Length + split.Length - 1);
+                Array.Copy(split, 1, values, index, split.Length - 1);
+            }
+
+#if NETSTANDARD2_0
+            return values[values.Length - 1];
+#else
+            return values[^1];
+#endif
+        }
 
         private async System.Threading.Tasks.Task<IEnumerable<int>> Add(IEnumerable<System.IO.FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default)
         {
@@ -301,7 +594,7 @@ namespace EBook.Downloader.Calibre
             return bookIds;
         }
 
-        private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default)
+        private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default)
         {
             var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
             this.logger.LogDebug(fullArguments);
@@ -353,6 +646,11 @@ namespace EBook.Downloader.Calibre
                 await process
                     .WaitForExitAsync()
                     .ConfigureAwait(false);
+            }
+
+            if (complete is not null)
+            {
+                complete();
             }
         }
     }
