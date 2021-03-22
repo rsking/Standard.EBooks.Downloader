@@ -11,8 +11,9 @@
   
   <PropertyGroup Label="Versions">
     <DotNetVersion>5.0.0</DotNetVersion>
-    <HtmlAgilityPackVersion>1.11.29</HtmlAgilityPackVersion>
+    <HtmlAgilityPackVersion>1.11.31</HtmlAgilityPackVersion>
     <SystemCommandLineHostingVersion>0.3.0-alpha.20574.7</SystemCommandLineHostingVersion>
+    <SerilogVersion>4.0.0</SerilogVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,11 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.645">
+    <PackageReference Include="Meziantou.Analyzer" Version="1.0.647">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Roslynator.Analyzers" Version="3.0.0">
+    <PackageReference Include="Roslynator.Analyzers" Version="3.1.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

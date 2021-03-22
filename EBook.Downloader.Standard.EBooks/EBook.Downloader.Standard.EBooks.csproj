@@ -9,7 +9,7 @@
     <PackageReference Include="HtmlAgilityPack" Version="$(HtmlAgilityPackVersion)" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(DotNetVersion)" />
-    <PackageReference Include="Serilog.AspNetCore" Version="3.4.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="$(SerilogVersion)" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
     <PackageReference Include="System.CommandLine.Hosting" Version="$(SystemCommandLineHostingVersion)" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="$(DotNetVersion)" />
