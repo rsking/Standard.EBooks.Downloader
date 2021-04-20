@@ -44,15 +44,25 @@ namespace EBook.Downloader.Calibre
 
         private readonly string calibreDbPath;
 
+        private readonly bool useContentServer;
+
         /// <summary>
         /// Initialises a new instance of the <see cref="CalibreDb"/> class.
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="calibrePath">The calibre path.</param>
-        public CalibreDb(string path, ILogger logger, string calibrePath = DefaultCalibrePath)
+        public CalibreDb(string path, bool useContentServer, ILogger logger, string calibrePath = DefaultCalibrePath)
         {
             this.Path = path;
+            this.useContentServer = useContentServer;
+            var builder = new UriBuilder
+                {
+                    Host = "127.0.0.1",
+                    Port = 8080,
+                    Fragment = System.IO.Path.GetFileName(path),
+                };
+            this.ContentServer = builder.Uri;
             this.logger = logger;
             this.calibreDbPath = Environment.ExpandEnvironmentVariables(System.IO.Path.Combine(calibrePath, "calibredb.exe"));
         }
@@ -61,6 +71,11 @@ namespace EBook.Downloader.Calibre
         /// Gets the path.
         /// </summary>
         public string Path { get; }
+
+        /// <summary>
+        /// Gets the content server.
+        /// </summary>
+        public Uri ContentServer { get; }
 
         /// <summary>
         /// Performs the 'list' function.
@@ -239,7 +254,11 @@ namespace EBook.Downloader.Calibre
                     .Append(" --field ")
                     .Append(field.Key)
                     .Append(':')
+#if NETSTANDARD2_0
                     .Append(string.Join(",", field.Select(value => value?.ToString()).Select(QuoteIfRequired)));
+#else
+                    .AppendJoin(",", field.Select(value => value?.ToString()).Select(QuoteIfRequired));
+#endif
             }
 
             return this.ExecuteCalibreDbAsync("set_metadata", stringBuilder.ToString());
@@ -363,7 +382,6 @@ namespace EBook.Downloader.Calibre
 #else
                     items[^1];
 #endif
-
             }
         }
 
@@ -594,8 +612,14 @@ namespace EBook.Downloader.Calibre
             {
                 if (Preprocess(data) is string { Length: > 0 } line && line.StartsWith("Added book ids", StringComparison.Ordinal))
                 {
+                    line =
+#if NETSTANDARD2_0
+                        line.Substring(16);
+#else
+                        line[16..];
+#endif
+
                     bookIds.AddRange(line
-                        .Substring(16)
                         .Split(',')
                         .Select(value => value.Trim())
                         .Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)));
@@ -607,7 +631,10 @@ namespace EBook.Downloader.Calibre
 
         private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default)
         {
-            var fullArguments = command + " --library-path \"" + this.Path + "\" " + arguments;
+            var path = this.useContentServer
+                ? this.ContentServer.ToString()
+                : "\"" + this.Path + "\"";
+            var fullArguments = $"{command} --with-library {path} {arguments}";
             this.logger.LogDebug(fullArguments);
 
             var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)

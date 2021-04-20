@@ -34,7 +34,7 @@ static async Task Tags(
     IHost host,
     System.IO.DirectoryInfo calibreLibraryPath)
 {
-    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreDb>>());
+    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: false, host.Services.GetRequiredService<ILogger<CalibreDb>>());
     await foreach (var category in calibreDb
         .ListCategories()
         .Where(category => category.CategoryType == CategoryType.Tags)

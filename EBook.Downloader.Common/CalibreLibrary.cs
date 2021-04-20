@@ -40,11 +40,11 @@ namespace EBook.Downloader.Common
         /// <param name="path">The path.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="calibrePath">The path to the calibre binaries.</param>
-        public CalibreLibrary(string path, ILogger logger, string calibrePath = Calibre.CalibreDb.DefaultCalibrePath)
+        public CalibreLibrary(string path, bool useContentServer, ILogger logger, string calibrePath = Calibre.CalibreDb.DefaultCalibrePath)
         {
             this.Path = path;
             this.logger = logger;
-            this.calibreDb = new Calibre.CalibreDb(path, logger, calibrePath);
+            this.calibreDb = new Calibre.CalibreDb(path, useContentServer, logger, calibrePath);
 
             var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db"), Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite };
             this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
@@ -336,7 +336,7 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document, System.Func<System.Text.Json.JsonElement, bool> predicate) => document
+        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document, Func<System.Text.Json.JsonElement, bool> predicate) => document
             .RootElement
             .EnumerateArray()
             .Where(predicate)
@@ -474,6 +474,6 @@ namespace EBook.Downloader.Common
 
         private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier));
 
-        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "formats", "last_modified", "identifiers" }, searchPattern: searchPattern).ConfigureAwait(false), predicate);
+        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern).ConfigureAwait(false), predicate);
     }
 }

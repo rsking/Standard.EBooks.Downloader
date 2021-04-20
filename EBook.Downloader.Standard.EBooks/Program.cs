@@ -27,9 +27,10 @@ const int MaxTimeOffset = 180;
 
 const string AtomUrl = "https://standardebooks.org/opds/all";
 
-var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int>(Process) })
+var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, bool, int>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
-    .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, "The output path") { Argument = new Argument<System.IO.DirectoryInfo>("PATH", () => new System.IO.DirectoryInfo(Environment.CurrentDirectory)) { Arity = ArgumentArity.ExactlyOne } }.ExistingOnly())
+    .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, () => new System.IO.DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
+    .AddOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .AddOption(new Option<bool>(new[] { "-c", "--check-metadata" }, "Whether to check the metadata"))
     .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
     .AddOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
@@ -72,6 +73,7 @@ static async Task Process(
     IHost host,
     System.IO.DirectoryInfo calibreLibraryPath,
     System.IO.DirectoryInfo outputPath,
+    bool useContentServer = false,
     bool checkMetadata = false,
     bool resync = false,
     int maxTimeOffset = MaxTimeOffset)
@@ -114,7 +116,7 @@ static async Task Process(
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
     var atomUri = new Uri(AtomUrl);
-    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
         .Where(item => item.LastUpdatedTime > sentinelDateTime)
         .OrderBy(item => item.LastUpdatedTime)

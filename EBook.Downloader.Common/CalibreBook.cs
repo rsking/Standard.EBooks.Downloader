@@ -13,6 +13,15 @@ namespace EBook.Downloader.Common
     /// </summary>
     public record CalibreBook
     {
+        private static char[] GetInvalidFileNameChars() => new char[]
+        {
+            '\"', '<', '>', '|', '\0',
+            (char)1, (char)2, (char)3, (char)4, (char)5, (char)6, (char)7, (char)8, (char)9, (char)10,
+            (char)11, (char)12, (char)13, (char)14, (char)15, (char)16, (char)17, (char)18, (char)19, (char)20,
+            (char)21, (char)22, (char)23, (char)24, (char)25, (char)26, (char)27, (char)28, (char)29, (char)30,
+            (char)31, ':', '*', '?', '\\', '/'
+        };
+
         /// <summary>
         /// Initialises a new instance of the <see cref="CalibreBook"/> class.
         /// </summary>
@@ -20,10 +29,29 @@ namespace EBook.Downloader.Common
         public CalibreBook(System.Text.Json.JsonElement element)
         {
             this.Id = element.GetProperty("id").GetInt32();
-            var file = new System.IO.FileInfo(element.GetProperty("formats").EnumerateArray().First().GetString());
-            this.Name = file.Name.Substring(0, file.Name.Length - file.Extension.Length);
-            this.Path = $"{file.Directory.Parent.Name}{System.IO.Path.AltDirectorySeparatorChar}{file.Directory.Name}";
+
+            // authors
+            var authors = element.GetProperty("authors").GetString()
+                ?? throw new System.ArgumentException("Failed to get authors", nameof(element));
+            this.Authors = authors.Split('&').Select(author => author.Trim()).ToArray();
+            var sanitizedAuthor = Sanitise(this.Authors[0]);
+
+            // name
+            var name = element.GetProperty("title").GetString()
+                ?? throw new System.ArgumentException("Failed to get title", nameof(element));
+            var sanitisedName = Sanitise(name.Trim());
+            this.Name = $"{TrimIfRequired(sanitisedName, 31)} - {sanitizedAuthor}";
+
+            // path
+            this.Path = System.FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
             this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
+
+            static string TrimIfRequired(string input, int length)
+            {
+                return input.Length > length
+                    ? input.Substring(0, length).TrimEnd()
+                    : input;
+            }
         }
 
         /// <summary>
@@ -41,6 +69,11 @@ namespace EBook.Downloader.Common
         /// Gets the Name.
         /// </summary>
         public string Name { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Gets the authors.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Gets the Path.
@@ -71,6 +104,48 @@ namespace EBook.Downloader.Common
             static System.Collections.Generic.IEnumerable<string> GetPathsSegments(string path)
             {
                 return path.Split(System.IO.Path.AltDirectorySeparatorChar);
+            }
+        }
+
+        private static string Sanitise(string input)
+        {
+            var length = input.Length;
+            var inputChars = input.ToCharArray();
+            var outputChars = new char[4 * length];
+
+            var characters = Lucene.Net.Analysis.Miscellaneous.ASCIIFoldingFilter.FoldToASCII(inputChars, 0, outputChars, 0, length);
+
+            return RemoveOthers(outputChars, characters);
+
+            static string RemoveOthers(char[] normalizedString, int length)
+            {
+                var stringBuilder = new System.Text.StringBuilder();
+                var invalidChars = GetInvalidFileNameChars();
+
+                for (int i = 0; i < length; i++)
+                {
+                    var c = normalizedString[i];
+                    var unicodeCategory = char.GetUnicodeCategory(c);
+                    if (c > 128)
+                    {
+                        stringBuilder.Append('_').Append('_');
+                    }
+                    else if (invalidChars.Contains(c))
+                    {
+                        stringBuilder.Append('_');
+                    }
+                    else if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    {
+                        stringBuilder.Append(c);
+                    }
+                }
+
+                if (stringBuilder[stringBuilder.Length - 1] == '.')
+                {
+                    stringBuilder[stringBuilder.Length - 1] = '_';
+                }
+
+                return stringBuilder.ToString();
             }
         }
     }

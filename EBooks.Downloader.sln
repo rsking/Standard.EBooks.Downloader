@@ -11,13 +11,14 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 		Directory.Build.props = Directory.Build.props
+		nuget.config = nuget.config
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EBook.Downloader.Syncfusion", "EBook.Downloader.Syncfusion\EBook.Downloader.Syncfusion.csproj", "{1A1A5610-43B7-490A-A9E7-C8645942E4A0}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EBook.Downloader.Calibre", "EBook.Downloader.Calibre\EBook.Downloader.Calibre.csproj", "{B4961B97-185E-4BF6-AF86-A4F4241032D1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EBook.Downloader.Maintenance", "EBook.Downloader.Maintenance\EBook.Downloader.Maintenance.csproj", "{BF13F71D-E89D-4034-ABA4-C7927C18E48A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EBook.Downloader.Maintenance", "EBook.Downloader.Maintenance\EBook.Downloader.Maintenance.csproj", "{BF13F71D-E89D-4034-ABA4-C7927C18E48A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

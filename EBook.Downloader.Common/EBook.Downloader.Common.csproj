@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetVersion)" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="$(DotNetVersion)" />
     <PackageReference Include="System.Collections.Immutable" Version="$(DotNetVersion)" />
+    <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00014" />
   </ItemGroup>
 
   <ItemGroup>
