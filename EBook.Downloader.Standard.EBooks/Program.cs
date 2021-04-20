@@ -159,6 +159,11 @@ static async Task Process(
                         }
                     }
                 }
+                else
+                {
+                    // book should exist here!
+                    programLogger.LogError("Failed to find {Title} - {Name} - {Extension}", item.Title.Text, name, extension.TrimStart('.'));
+                }
             }
             else
             {
