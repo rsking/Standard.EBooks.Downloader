@@ -155,7 +155,7 @@ static async Task Process(
                         }
                         else
                         {
-                            await calibreLibrary.UpdateLastModified(book, lastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
+                            await calibreLibrary.UpdateLastModifiedAsync(book, lastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
                         }
                     }
                 }

@@ -20,11 +20,15 @@ namespace EBook.Downloader.Common
 
         private const string UpdateLastModifiedById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
 
+        private const string SelectLastModifiedById = "SELECT last_modified FROM books WHERE id = :id";
+
         private readonly ILogger logger;
 
         private readonly Calibre.CalibreDb calibreDb;
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand updateLastModifiedCommand;
+
+        private readonly Microsoft.Data.Sqlite.SqliteCommand selectLastModifiedCommand;
 
         private readonly Microsoft.Data.Sqlite.SqliteCommand? dropTriggerCommand;
 
@@ -55,6 +59,10 @@ namespace EBook.Downloader.Common
             this.updateLastModifiedCommand.CommandText = UpdateLastModifiedById;
             this.updateLastModifiedCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
             this.updateLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+            this.selectLastModifiedCommand = this.connection.CreateCommand();
+            this.selectLastModifiedCommand.CommandText = SelectLastModifiedById;
+            this.selectLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
             var createTriggerCommandText = default(string);
             using (var command = this.connection.CreateCommand())
@@ -136,7 +144,7 @@ namespace EBook.Downloader.Common
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
                         await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                        await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset).ConfigureAwait(false);
                     }
 
                     return true;
@@ -166,7 +174,7 @@ namespace EBook.Downloader.Common
 
                     await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
                     await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book.Id, book.Name, info.Path.LastWriteTimeUtc, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
                     return true;
                 }
 
@@ -294,7 +302,7 @@ namespace EBook.Downloader.Common
                     book = processed;
                 }
 
-                await this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset).ConfigureAwait(false);
+                await this.UpdateLastModifiedAsync(book, lastModified, maxTimeOffset).ConfigureAwait(false);
             }
         }
 
@@ -305,9 +313,21 @@ namespace EBook.Downloader.Common
         /// <param name="lastModified">The last modified date.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModified(CalibreBook book, DateTime lastModified, int maxTimeOffset) => book is null
-            ? throw new ArgumentNullException(nameof(book))
-            : this.UpdateLastModifiedAsync(book.Id, book.Name, lastModified, book.LastModified, maxTimeOffset);
+        public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset)
+        {
+            if (book is null)
+            {
+                throw new ArgumentNullException(nameof(book));
+            }
+
+            var bookLastModified = await this.GetDateTimeFromDatabaseAsync(book.Id).ConfigureAwait(false);
+            await this.UpdateLastModifiedAsync(
+                book.Id,
+                book.Name,
+                lastModified,
+                bookLastModified,
+                maxTimeOffset).ConfigureAwait(false);
+        }
 
         /// <inheritdoc />
         public void Dispose()
@@ -328,6 +348,7 @@ namespace EBook.Downloader.Common
                 if (disposing)
                 {
                     this.updateLastModifiedCommand?.Dispose();
+                    this.selectLastModifiedCommand?.Dispose();
                     this.dropTriggerCommand?.Dispose();
                     this.createTriggerCommand?.Dispose();
                     this.connection?.Dispose();
@@ -335,6 +356,20 @@ namespace EBook.Downloader.Common
 
                 this.disposedValue = true;
             }
+        }
+
+        private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id)
+        {
+            this.selectLastModifiedCommand.Parameters[":id"].Value = id;
+            var dateTimeObject = await this.selectLastModifiedCommand
+                .ExecuteScalarAsync()
+                .ConfigureAwait(false);
+            if (dateTimeObject is string dataTimeString)
+            {
+                return System.DateTime.Parse(dataTimeString, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+            }
+
+            throw new InvalidOperationException("Failed to get last modified time");
         }
 
         private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document, Func<System.Text.Json.JsonElement, bool> predicate) => document
