@@ -38,6 +38,7 @@ namespace EBook.Downloader.Common
         /// Initialises a new instance of the <see cref="CalibreLibrary" /> class.
         /// </summary>
         /// <param name="path">The path.</param>
+        /// <param name="useContentServer">Set to <see langword="true" /> to use the content server.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="calibrePath">The path to the calibre binaries.</param>
         public CalibreLibrary(string path, bool useContentServer, ILogger logger, string calibrePath = Calibre.CalibreDb.DefaultCalibrePath)
@@ -434,7 +435,17 @@ namespace EBook.Downloader.Common
             {
                 var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\"")).ConfigureAwait(false);
                 var json = document.RootElement.EnumerateArray().First();
-                return (json.TryGetProperty("series", out var seriesProperty) ? seriesProperty.GetString() : default, json.GetProperty("series_index").GetSingle());
+                return (GetSeries(json), (float)json.GetProperty("series_index").GetSingle());
+
+                static string? GetSeries(System.Text.Json.JsonElement json)
+                {
+                    if (json.TryGetProperty("series", out var seriesProperty))
+                    {
+                        return seriesProperty.GetString();
+                    }
+
+                    return default;
+                }
             }
         }
 

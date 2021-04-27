@@ -50,6 +50,7 @@ namespace EBook.Downloader.Calibre
         /// Initialises a new instance of the <see cref="CalibreDb"/> class.
         /// </summary>
         /// <param name="path">The path.</param>
+        /// <param name="useContentServer">Set to <see langword="true" /> to use the content server.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="calibrePath">The calibre path.</param>
         public CalibreDb(string path, bool useContentServer, ILogger logger, string calibrePath = DefaultCalibrePath)
