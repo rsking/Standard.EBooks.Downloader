@@ -91,8 +91,9 @@ namespace EBook.Downloader.Common
         /// <param name="identifier">The identifier.</param>
         /// <param name="type">The type of identifier.</param>
         /// <param name="extension">The extension to check.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The book.</returns>
-        public Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension)
+        public Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension, System.Threading.CancellationToken cancellationToken = default)
         {
             if (identifier is null)
             {
@@ -100,7 +101,7 @@ namespace EBook.Downloader.Common
             }
 
             // get the date time of the format
-            return this.GetCalibreBookAsync(new Calibre.Identifier(type, identifier), extension?.TrimStart('.') ?? "EPUB");
+            return this.GetCalibreBookAsync(new Calibre.Identifier(type, identifier), extension?.TrimStart('.') ?? "EPUB", cancellationToken);
         }
 
         /// <summary>
@@ -108,8 +109,9 @@ namespace EBook.Downloader.Common
         /// </summary>
         /// <param name="info">The EPUB info.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
-        public Task<bool> AddOrUpdateAsync(EpubInfo info, int maxTimeOffset)
+        public Task<bool> AddOrUpdateAsync(EpubInfo info, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (info is null)
             {
@@ -123,12 +125,12 @@ namespace EBook.Downloader.Common
             async Task<bool> AddOrUpdateInternalAsync(EpubInfo info, int maxTimeOffset)
             {
                 var identifier = info.Identifiers.First();
-                var book = await this.GetCalibreBookAsync(new Calibre.Identifier(identifier.Key, identifier.Value), info.Path.Extension.TrimStart('.')).ConfigureAwait(false);
+                var book = await this.GetCalibreBookAsync(new Calibre.Identifier(identifier.Key, identifier.Value), info.Path.Extension.TrimStart('.'), cancellationToken).ConfigureAwait(false);
 
                 if (book is null)
                 {
                     // see if we need to add the book or add the format
-                    book = await this.GetCalibreBookAsync(new Calibre.Identifier(identifier.Key, identifier.Value)).ConfigureAwait(false);
+                    book = await this.GetCalibreBookAsync(new Calibre.Identifier(identifier.Key, identifier.Value), cancellationToken).ConfigureAwait(false);
 
                     if (book is null)
                     {
@@ -137,14 +139,14 @@ namespace EBook.Downloader.Common
                     else if (info.Path is not null)
                     {
                         // add this format
-                        await this.calibreDb.AddFormatAsync(book.Id, info.Path, dontReplace: true).ConfigureAwait(false);
+                        await this.calibreDb.AddFormatAsync(book.Id, info.Path, dontReplace: true, cancellationToken: cancellationToken).ConfigureAwait(false);
                     }
 
                     if (book is not null && book.Path is not null && book.Name is not null && info.Path is not null)
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
-                        await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                        await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset).ConfigureAwait(false);
+                        await this.UpdateDescriptionAsync(book.Id, info.LongDescription, cancellationToken).ConfigureAwait(false);
+                        await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
                     }
 
                     return true;
@@ -164,7 +166,7 @@ namespace EBook.Downloader.Common
                         using (var stream = System.IO.File.OpenRead(fullPath))
                         {
                             int length;
-                            while ((length = await stream.ReadAsync(bytes, 0, bytes.Length).ConfigureAwait(false)) == bytes.Length)
+                            while ((length = await stream.ReadAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false)) == bytes.Length)
                             {
                             }
                         }
@@ -172,9 +174,9 @@ namespace EBook.Downloader.Common
                         info.Path.CopyTo(fullPath, overwrite: true);
                     }
 
-                    await this.UpdateDescriptionAsync(book.Id, info.LongDescription).ConfigureAwait(false);
-                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
+                    await this.UpdateDescriptionAsync(book.Id, info.LongDescription, cancellationToken).ConfigureAwait(false);
+                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex, cancellationToken).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
                     return true;
                 }
 
@@ -208,13 +210,15 @@ namespace EBook.Downloader.Common
                     }
 
                     // we need to add this
-                    var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags).ConfigureAwait(false);
+                    var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags, cancellationToken: cancellationToken).ConfigureAwait(false);
                     if (coverFile != default && System.IO.File.Exists(coverFile))
                     {
                         System.IO.File.Delete(coverFile);
                     }
 
-                    return await this.GetCalibreBookAsync(bookId).ConfigureAwait(false);
+                    return bookId == -1
+                        ? default
+                        : await this.GetCalibreBookAsync(bookId, cancellationToken).ConfigureAwait(false);
                 }
 
                 static bool CheckFiles(System.IO.FileInfo source, string destination, ILogger logger)
@@ -280,8 +284,9 @@ namespace EBook.Downloader.Common
         /// <param name="seriesName">The series name.</param>
         /// <param name="seriesIndex">The series index.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset)
+        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (book is null)
             {
@@ -294,15 +299,15 @@ namespace EBook.Downloader.Common
 
             async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset)
             {
-                if ((await this.UpdateDescriptionAsync(book.Id, longDescription).ConfigureAwait(false)
-                    || await this.UpdateSeriesAsync(book.Id, seriesName, seriesIndex).ConfigureAwait(false))
-                    && await this.GetCalibreBookAsync(book.Id).ConfigureAwait(false) is CalibreBook processed)
+                if ((await this.UpdateDescriptionAsync(book.Id, longDescription, cancellationToken).ConfigureAwait(false)
+                    || await this.UpdateSeriesAsync(book.Id, seriesName, seriesIndex, cancellationToken).ConfigureAwait(false))
+                    && await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
                 {
                     // refresh the book with the last data
                     book = processed;
                 }
 
-                await this.UpdateLastModifiedAsync(book, lastModified, maxTimeOffset).ConfigureAwait(false);
+                await this.UpdateLastModifiedAsync(book, lastModified, maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -312,21 +317,23 @@ namespace EBook.Downloader.Common
         /// <param name="book">The book.</param>
         /// <param name="lastModified">The last modified date.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task associated with this function.</returns>
-        public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset)
+        public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (book is null)
             {
                 throw new ArgumentNullException(nameof(book));
             }
 
-            var bookLastModified = await this.GetDateTimeFromDatabaseAsync(book.Id).ConfigureAwait(false);
+            var bookLastModified = await this.GetDateTimeFromDatabaseAsync(book.Id, cancellationToken).ConfigureAwait(false);
             await this.UpdateLastModifiedAsync(
                 book.Id,
                 book.Name,
                 lastModified,
                 bookLastModified,
-                maxTimeOffset).ConfigureAwait(false);
+                maxTimeOffset,
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -358,26 +365,20 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id)
+        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
         {
-            this.selectLastModifiedCommand.Parameters[":id"].Value = id;
-            var dateTimeObject = await this.selectLastModifiedCommand
-                .ExecuteScalarAsync()
-                .ConfigureAwait(false);
-            if (dateTimeObject is string dataTimeString)
+            if (document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
             {
-                return System.DateTime.Parse(dataTimeString, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+                return default;
             }
 
-            throw new InvalidOperationException("Failed to get last modified time");
+            return document
+              .RootElement
+              .EnumerateArray()
+              .Where(predicate)
+              .Select(json => new CalibreBook(json))
+              .SingleOrDefault();
         }
-
-        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument document, Func<System.Text.Json.JsonElement, bool> predicate) => document
-            .RootElement
-            .EnumerateArray()
-            .Where(predicate)
-            .Select(json => new CalibreBook(json))
-            .SingleOrDefault();
 
         private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier)
         {
@@ -390,14 +391,35 @@ namespace EBook.Downloader.Common
             return identifierValue.Equals(identifier.Value.ToString(), StringComparison.Ordinal);
         }
 
-        private async Task<bool> UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription)
+        private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id, System.Threading.CancellationToken cancellationToken)
+        {
+            this.selectLastModifiedCommand.Parameters[":id"].Value = id;
+            var dateTimeObject = await this.selectLastModifiedCommand
+                .ExecuteScalarAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (dateTimeObject is string dataTimeString)
+            {
+                return DateTime.Parse(dataTimeString, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+            }
+
+            throw new InvalidOperationException("Failed to get last modified time");
+        }
+
+        private async Task<bool> UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription, System.Threading.CancellationToken cancellationToken)
         {
             if (longDescription is null)
             {
                 return false;
             }
 
-            var document = await this.calibreDb.ListAsync(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\"")).ConfigureAwait(false);
+            var document = await this.calibreDb
+                .ListAsync(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            if (document is null)
+            {
+                return false;
+            }
+
             var json = document.RootElement.EnumerateArray().First();
             var currentDescription = SanitiseHtml(json.GetProperty("comments").GetString());
             var newDescription = SanitiseHtml(longDescription.OuterXml);
@@ -408,8 +430,8 @@ namespace EBook.Downloader.Common
 
             // execute calibredb to update the description
             this.logger.LogInformation("Updating description to the long description");
-            await this.calibreDb.SetMetadataAsync(id, "comments", newDescription).ConfigureAwait(false);
-            return true;
+            await this.calibreDb.SetMetadataAsync(id, "comments", newDescription, cancellationToken).ConfigureAwait(false);
+            return !cancellationToken.IsCancellationRequested;
 
             static string? SanitiseHtml(string? html)
             {
@@ -424,9 +446,14 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex)
+        private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex, System.Threading.CancellationToken cancellationToken = default)
         {
             var (currentSeriesName, currentSeriesIndex) = await GetCurrentSeriesAsync().ConfigureAwait(false);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+
             if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && (seriesName is null || currentSeriesIndex == seriesIndex))
             {
                 // neither have a series, or the indexes match in the same series.
@@ -461,14 +488,19 @@ namespace EBook.Downloader.Common
 
             if (fields is not null)
             {
-                await this.calibreDb.SetMetadataAsync(id, fields.ToLookup(_ => _.Field, _ => _.Value, StringComparer.OrdinalIgnoreCase)).ConfigureAwait(false);
+                await this.calibreDb.SetMetadataAsync(id, fields.ToLookup(_ => _.Field, _ => _.Value, StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
             }
 
             return true;
 
             async Task<(string?, float)> GetCurrentSeriesAsync()
             {
-                var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\"")).ConfigureAwait(false);
+                var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (document is null)
+                {
+                    return default;
+                }
+
                 var json = document.RootElement.EnumerateArray().First();
                 return (GetSeries(json), (float)json.GetProperty("series_index").GetSingle());
 
@@ -484,7 +516,7 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset)
+        private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (fileLastModified == lastModified)
             {
@@ -502,24 +534,24 @@ namespace EBook.Downloader.Common
 
                 if (this.dropTriggerCommand is not null)
                 {
-                    await this.dropTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    await this.dropTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                await this.updateLastModifiedCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
+                await this.updateLastModifiedCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
                 if (this.createTriggerCommand is not null)
                 {
-                    await this.createTriggerCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    await this.createTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
             }
         }
 
-        private Task<CalibreBook?> GetCalibreBookAsync(int id) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""), _ => true);
+        private Task<CalibreBook?> GetCalibreBookAsync(int id, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""), _ => true, cancellationToken);
 
-        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier));
+        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
-        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier));
+        private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
-        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern).ConfigureAwait(false), predicate);
+        private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, System.Threading.CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
     }
 }

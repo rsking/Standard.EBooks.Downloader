@@ -89,8 +89,9 @@ namespace EBook.Downloader.Calibre
         /// <param name="separator">The string used to separate fields. Default is a space.</param>
         /// <param name="prefix">The prefix for all file paths. Default is the absolute path to the library folder.</param>
         /// <param name="limit">The maximum number of results to display. Default: all.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The JSON document.</returns>
-        public async System.Threading.Tasks.Task<System.Text.Json.JsonDocument> ListAsync(IEnumerable<string>? fields = default, string sortBy = DefaultSortBy, bool ascending = default, string? searchPattern = default, int lineWidth = DefaultLineWidth, string? separator = DefaultSeparator, string? prefix = default, int limit = DefaultLimit)
+        public async System.Threading.Tasks.Task<System.Text.Json.JsonDocument?> ListAsync(IEnumerable<string>? fields = default, string sortBy = DefaultSortBy, bool ascending = default, string? searchPattern = default, int lineWidth = DefaultLineWidth, string? separator = DefaultSeparator, string? prefix = default, int limit = DefaultLimit, System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder();
             var fieldsValue = fields is null ? string.Empty : string.Join(",", fields);
@@ -106,22 +107,29 @@ namespace EBook.Downloader.Calibre
             var command = stringBuilder.ToString();
             stringBuilder.Length = 0;
 
-            await this.ExecuteCalibreDbAsync("list", command, data =>
-            {
-                if (Preprocess(data) is string value)
+            await this.ExecuteCalibreDbAsync(
+                "list",
+                command,
+                data =>
                 {
-                    stringBuilder.Append(value);
-                }
-            }).ConfigureAwait(false);
+                    if (Preprocess(data) is string value)
+                    {
+                        stringBuilder.Append(value);
+                    }
+                },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            return System.Text.Json.JsonDocument.Parse(stringBuilder.ToString());
+            return cancellationToken.IsCancellationRequested
+                ? default
+                : System.Text.Json.JsonDocument.Parse(stringBuilder.ToString());
         }
 
         /// <summary>
         /// Adds an empty book record.
         /// </summary>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The book ID.</returns>
-        public async System.Threading.Tasks.Task<int> AddEmptyAsync() => (await this.Add(Enumerable.Empty<System.IO.FileInfo>(), empty: true).ConfigureAwait(false)).Single();
+        public async System.Threading.Tasks.Task<int> AddEmptyAsync(System.Threading.CancellationToken cancellationToken = default) => (await this.AddAsync(Enumerable.Empty<System.IO.FileInfo>(), empty: true, cancellationToken: cancellationToken).ConfigureAwait(false)).Single();
 
         /// <summary>
         /// Performs the 'add' function.
@@ -138,10 +146,11 @@ namespace EBook.Downloader.Calibre
         /// <param name="seriesIndex">Set the series number of the added book.</param>
         /// <param name="cover">Path to the cover to use for the added book.</param>
         /// <param name="languages">A comma separated list of languages (best to use ISO639 language codes, though some language names may also be recognized).</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The book ID.</returns>
-        public async System.Threading.Tasks.Task<int> AddAsync(System.IO.FileInfo file, bool duplicates = false, AutoMerge autoMerge = default, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default)
+        public async System.Threading.Tasks.Task<int> AddAsync(System.IO.FileInfo file, bool duplicates = false, AutoMerge autoMerge = default, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, System.Threading.CancellationToken cancellationToken = default)
         {
-            var results = await this.Add(
+            var results = await this.AddAsync(
                 new[] { file },
                 duplicates,
                 autoMerge,
@@ -154,8 +163,9 @@ namespace EBook.Downloader.Calibre
                 series,
                 seriesIndex,
                 cover,
-                languages).ConfigureAwait(false);
-            return results.Single();
+                languages,
+                cancellationToken).ConfigureAwait(false);
+            return cancellationToken.IsCancellationRequested ? -1 : results.Single();
         }
 
         /// <summary>
@@ -164,8 +174,9 @@ namespace EBook.Downloader.Calibre
         /// <param name="id">The book ID.</param>
         /// <param name="ebookFile">The EBook file.</param>
         /// <param name="dontReplace">Set to <see langword="true"/> to not replace the format if it already exists.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
-        public System.Threading.Tasks.Task AddFormatAsync(int id, System.IO.FileInfo ebookFile, bool dontReplace = false)
+        public System.Threading.Tasks.Task AddFormatAsync(int id, System.IO.FileInfo ebookFile, bool dontReplace = false, System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder()
                 .AppendIf(dontReplace, " --dont-replace")
@@ -174,15 +185,16 @@ namespace EBook.Downloader.Calibre
                 .Append(' ')
                 .Append(QuoteIfRequired(ebookFile.FullName));
 
-            return this.ExecuteCalibreDbAsync("add_format", stringBuilder.ToString());
+            return this.ExecuteCalibreDbAsync("add_format", stringBuilder.ToString(), cancellationToken: cancellationToken);
         }
 
         /// <summary>
         /// Performs the 'search' function.
         /// </summary>
         /// <param name="searchExpression">The search expression.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The IDs.</returns>
-        public async IAsyncEnumerable<int> SearchAsync(string searchExpression)
+        public async IAsyncEnumerable<int> SearchAsync(string searchExpression, [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
         {
             var results = new System.Collections.Concurrent.ConcurrentQueue<int>();
             var end = false;
@@ -206,11 +218,17 @@ namespace EBook.Downloader.Calibre
                 {
                     end = true;
                     resetEvent.Set();
-                });
+                },
+                cancellationToken);
 
             do
             {
-                await resetEvent.WaitAsync().ConfigureAwait(false);
+                await resetEvent.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
                 while (results.TryDequeue(out var result))
                 {
                     yield return result;
@@ -227,8 +245,9 @@ namespace EBook.Downloader.Calibre
         /// <param name="id">The book ID.</param>
         /// <param name="field">The field name.</param>
         /// <param name="value">The value.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
-        public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, object? value) => this.SetMetadataAsync(id, field, new[] { value });
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, object? value, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
 
         /// <summary>
         /// Performs the 'set_metadata' function.
@@ -236,16 +255,18 @@ namespace EBook.Downloader.Calibre
         /// <param name="id">The book ID.</param>
         /// <param name="field">The field name.</param>
         /// <param name="values">The values.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
-        public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, IEnumerable<object?> values) => this.SetMetadataAsync(id, values.ToLookup(_ => field, value => value, StringComparer.Ordinal));
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, IEnumerable<object?> values, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, values.ToLookup(_ => field, value => value, StringComparer.Ordinal), cancellationToken);
 
         /// <summary>
         /// Performs the 'set_metadata' function.
         /// </summary>
         /// <param name="id">The book ID.</param>
         /// <param name="fields">The fields to set.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
-        public System.Threading.Tasks.Task SetMetadataAsync(int id, ILookup<string, object?> fields)
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, ILookup<string, object?> fields, System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder();
             stringBuilder.Append(id);
@@ -262,15 +283,16 @@ namespace EBook.Downloader.Calibre
 #endif
             }
 
-            return this.ExecuteCalibreDbAsync("set_metadata", stringBuilder.ToString());
+            return this.ExecuteCalibreDbAsync("set_metadata", stringBuilder.ToString(), cancellationToken: cancellationToken);
         }
 
         /// <summary>
         /// Performs the 'show_metadata' function.
         /// </summary>
         /// <param name="id">The ID.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The OPF package.</returns>
-        public async System.Threading.Tasks.Task<Opf.Package> ShowMetadataAsync(int id)
+        public async System.Threading.Tasks.Task<Opf.Package> ShowMetadataAsync(int id, System.Threading.CancellationToken cancellationToken = default)
         {
             const int BufferSize = 4096;
             using var memoryStream = new System.IO.MemoryStream(BufferSize);
@@ -281,25 +303,40 @@ namespace EBook.Downloader.Calibre
             await using (writer)
 #endif
             {
-                await this.ExecuteCalibreDbAsync("show_metadata", FormattableString.Invariant($"{id} --as-opf"), data =>
-                {
-                    if (Preprocess(data) is string value)
+                await this.ExecuteCalibreDbAsync(
+                    "show_metadata",
+                    FormattableString.Invariant($"{id} --as-opf"),
+                    data =>
                     {
-                        writer.WriteLine(value);
-                    }
-                }).ConfigureAwait(false);
+                        if (Preprocess(data) is string value)
+                        {
+                            writer.WriteLine(value);
+                        }
+                    },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return new Opf.Package();
             }
 
             memoryStream.Position = 0;
             var xmlSerializer = new System.Xml.Serialization.XmlSerializer(typeof(Opf.Package));
-            return (Opf.Package)xmlSerializer.Deserialize(memoryStream);
+            if (xmlSerializer.Deserialize(memoryStream) is Opf.Package package)
+            {
+                return package;
+            }
+
+            throw new InvalidOperationException("Failed to deserialize OPF payload");
         }
 
         /// <summary>
         /// Performs the 'show_categories' function.
         /// </summary>
+        /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The categories.</returns>
-        public async IAsyncEnumerable<Category> ListCategories()
+        public async IAsyncEnumerable<Category> ListCategories([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder();
             stringBuilder
@@ -336,12 +373,18 @@ namespace EBook.Downloader.Calibre
                 {
                     end = true;
                     resetEvent.Set();
-                });
+                },
+                cancellationToken: cancellationToken);
 
             string?[]? values = default;
             do
             {
-                await resetEvent.WaitAsync().ConfigureAwait(false);
+                await resetEvent.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
                 while (lines.TryDequeue(out var line))
                 {
                     string? lastItem = default;
@@ -362,11 +405,21 @@ namespace EBook.Downloader.Calibre
 
                     CleanValues(values);
 
-                    yield return new Category(
-                        (CategoryType)Enum.Parse(typeof(CategoryType), values[0]?.Trim('#'), ignoreCase: true),
-                        values[1]!,
-                        int.Parse(values[2], System.Globalization.CultureInfo.InvariantCulture),
-                        float.Parse(values[3], System.Globalization.CultureInfo.InvariantCulture));
+                    if (Enum.TryParse<CategoryType>(values[0]?.Trim('#'), ignoreCase: true, out var categoryType)
+                        && values[1] is string tagName
+                        && int.TryParse(values[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count)
+                        && int.TryParse(values[3], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var rating))
+                    {
+                        yield return new Category(
+                            categoryType,
+                            tagName,
+                            count,
+                            rating);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Failed to extract category from {string.Join("|", values)}");
+                    }
 
                     values = default;
                 }
@@ -584,7 +637,7 @@ namespace EBook.Downloader.Calibre
 #endif
         }
 
-        private async System.Threading.Tasks.Task<IEnumerable<int>> Add(IEnumerable<System.IO.FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default)
+        private async System.Threading.Tasks.Task<IEnumerable<int>> AddAsync(IEnumerable<System.IO.FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder();
             stringBuilder
@@ -594,7 +647,7 @@ namespace EBook.Downloader.Calibre
                 .AppendIf(title is not null, () => FormattableString.Invariant($" --title={QuoteIfRequired(title)}"))
                 .AppendIf(authors is not null, () => FormattableString.Invariant($" --authors={QuoteIfRequired(authors)}"))
                 .AppendIf(isbn is not null, () => FormattableString.Invariant($" --isbn={QuoteIfRequired(isbn)}"))
-                .AppendIf(identifiers is not null, () => string.Join(" ", identifiers.Select(identifier => FormattableString.Invariant($" --identifier={identifier}"))))
+                .AppendIf(identifiers is not null, () => string.Join(" ", identifiers!.Select(identifier => FormattableString.Invariant($" --identifier={identifier}"))))
                 .AppendIf(tags is not null, () => FormattableString.Invariant($" --tags={QuoteIfRequired(tags)}"))
                 .AppendIf(series is not null, () => FormattableString.Invariant($" --series={QuoteIfRequired(series)}"))
                 .AppendIf(seriesIndex != -1, () => FormattableString.Invariant($" --series_index={seriesIndex}"))
@@ -609,28 +662,37 @@ namespace EBook.Downloader.Calibre
             }
 
             var bookIds = new List<int>();
-            await this.ExecuteCalibreDbAsync("add", stringBuilder.ToString(), data =>
-            {
-                if (Preprocess(data) is string { Length: > 0 } line && line.StartsWith("Added book ids", StringComparison.Ordinal))
+            await this.ExecuteCalibreDbAsync(
+                "add",
+                stringBuilder.ToString(),
+                data =>
                 {
-                    line =
+                    if (Preprocess(data) is string { Length: > 0 } line && line.StartsWith("Added book ids", StringComparison.Ordinal))
+                    {
+                        line =
 #if NETSTANDARD2_0
-                        line.Substring(16);
+                            line.Substring(16);
 #else
-                        line[16..];
+                            line[16..];
 #endif
 
-                    bookIds.AddRange(line
-                        .Split(',')
-                        .Select(value => value.Trim())
-                        .Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)));
-                }
-            }).ConfigureAwait(false);
+                        bookIds.AddRange(line
+                            .Split(',')
+                            .Select(value => value.Trim())
+                            .Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)));
+                    }
+                },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Enumerable.Empty<int>();
+            }
 
             return bookIds;
         }
 
-        private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default)
+        private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default, System.Threading.CancellationToken cancellationToken = default)
         {
             var path = this.useContentServer
                 ? this.ContentServer.ToString()
@@ -645,7 +707,11 @@ namespace EBook.Downloader.Calibre
                 RedirectStandardError = true,
             };
 
-            using var process = new System.Diagnostics.Process { StartInfo = processStartInfo };
+            using var process = new System.Diagnostics.Process
+            {
+                StartInfo = processStartInfo,
+                EnableRaisingEvents = true,
+            };
 
             process.OutputDataReceived += (sender, args) =>
             {
@@ -674,23 +740,37 @@ namespace EBook.Downloader.Calibre
                 this.logger.LogError(0, args.Data);
             };
 
+            process.Exited += (sender, args) =>
+            {
+                if (complete is not null)
+                {
+                    complete();
+                }
+            };
+
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
+#if NET5_0_OR_GREATER
+            await process
+                .WaitForExitAsync(cancellationToken)
+                .ConfigureAwait(false);
+#else
             if (await process
                 .WaitForExitAsync(System.Threading.Timeout.Infinite)
                 .ConfigureAwait(false))
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    process.Kill();
+                }
+
                 await process
                     .WaitForExitAsync()
                     .ConfigureAwait(false);
             }
-
-            if (complete is not null)
-            {
-                complete();
-            }
+#endif
         }
     }
 }

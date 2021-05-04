@@ -27,7 +27,7 @@ const int MaxTimeOffset = 180;
 
 const string AtomUrl = "https://standardebooks.org/opds/all";
 
-var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, bool, int>(Process) })
+var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, bool, int, System.Threading.CancellationToken>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, () => new System.IO.DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
     .AddOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
@@ -65,6 +65,7 @@ var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader"
         });
 
 return await builder
+    .CancelOnProcessTermination()
     .Build()
     .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
@@ -76,7 +77,8 @@ static async Task Process(
     bool useContentServer = false,
     bool checkMetadata = false,
     bool resync = false,
-    int maxTimeOffset = MaxTimeOffset)
+    int maxTimeOffset = MaxTimeOffset,
+    System.Threading.CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
     AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -170,34 +172,38 @@ static async Task Process(
                 programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
             }
 
-            var actualUri = await uri.ShouldDownloadAsync(lastWriteTimeUtc, httpClientFactory, url =>
-            {
-                var uriString = url.ToString();
-                var baseUri = uriString.Substring(0, uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1);
-
-                var split = GetFileNameWithoutExtension(uriString).Split('_');
-                var number = Math.Max(split.Length - 1, 2);
-                split = split[..number];
-                var fileName = string.Join('_', split.Take(number));
-                return new Uri(baseUri + fileName + GetExtension(uriString));
-
-                static string GetFileNameWithoutExtension(string path)
+            var actualUri = await uri.ShouldDownloadAsync(
+                lastWriteTimeUtc,
+                httpClientFactory,
+                url =>
                 {
-                    var fileName = GetFileName(path);
-                    return fileName.Substring(0, fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase));
-                }
+                    var uriString = url.ToString();
+                    var baseUri = uriString.Substring(0, uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1);
 
-                static string GetExtension(string path)
-                {
-                    var fileName = GetFileName(path);
-                    return fileName[fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)..];
-                }
+                    var split = GetFileNameWithoutExtension(uriString).Split('_');
+                    var number = Math.Max(split.Length - 1, 2);
+                    split = split[..number];
+                    var fileName = string.Join('_', split.Take(number));
+                    return new Uri(baseUri + fileName + GetExtension(uriString));
 
-                static string GetFileName(string path)
-                {
-                    return path[(path.LastIndexOf('/') + 1)..];
-                }
-            }).ConfigureAwait(false);
+                    static string GetFileNameWithoutExtension(string path)
+                    {
+                        var fileName = GetFileName(path);
+                        return fileName.Substring(0, fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    static string GetExtension(string path)
+                    {
+                        var fileName = GetFileName(path);
+                        return fileName[fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)..];
+                    }
+
+                    static string GetFileName(string path)
+                    {
+                        return path[(path.LastIndexOf('/') + 1)..];
+                    }
+                },
+                cancellationToken).ConfigureAwait(false);
 
             if (actualUri is null)
             {
@@ -205,7 +211,7 @@ static async Task Process(
             }
 
             // download this
-            var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory).ConfigureAwait(false);
+            var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory, cancellationToken).ConfigureAwait(false);
             if (path is null)
             {
                 continue;
@@ -261,7 +267,7 @@ static async Task Process(
         return link.Uri.IsAbsoluteUri ? link.Uri : new Uri(atomUri, link.Uri.OriginalString);
     }
 
-    static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory)
+    static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, System.Net.Http.IHttpClientFactory httpClientFactory, System.Threading.CancellationToken cancellationToken)
     {
         // create the file name
         var fileName = uri.GetFileName();
@@ -271,7 +277,7 @@ static async Task Process(
             logger.LogInformation("Downloading book {0}", fileName);
             try
             {
-                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory).ConfigureAwait(false);
+                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory, cancellationToken).ConfigureAwait(false);
             }
             catch (System.Net.Http.HttpRequestException ex)
             {

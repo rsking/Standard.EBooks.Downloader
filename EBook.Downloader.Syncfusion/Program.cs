@@ -48,6 +48,10 @@ static async Task Process(
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: false, logger);
     var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers" }, searchPattern: "series:\"=Succinctly\"").ConfigureAwait(false);
+    if (list is null)
+    {
+        return;
+    }
 
     var books = list.RootElement.EnumerateArray().Select(element =>
     {
