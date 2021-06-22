@@ -247,6 +247,16 @@ namespace EBook.Downloader.Calibre
         /// <param name="value">The value.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, StandardField field, object? value, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
+
+        /// <summary>
+        /// Performs the 'set_metadata' function.
+        /// </summary>
+        /// <param name="id">The book ID.</param>
+        /// <param name="field">The field name.</param>
+        /// <param name="value">The value.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The task.</returns>
         public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, object? value, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
 
         /// <summary>
@@ -257,7 +267,32 @@ namespace EBook.Downloader.Calibre
         /// <param name="values">The values.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task.</returns>
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, StandardField field, IEnumerable<object?> values, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, Serialize(field), values, cancellationToken);
+
+        /// <summary>
+        /// Performs the 'set_metadata' function.
+        /// </summary>
+        /// <param name="id">The book ID.</param>
+        /// <param name="field">The field name.</param>
+        /// <param name="values">The values.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The task.</returns>
         public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, IEnumerable<object?> values, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, values.ToLookup(_ => field, value => value, StringComparer.Ordinal), cancellationToken);
+
+        /// <summary>
+        /// Performs the 'set_metadata' function.
+        /// </summary>
+        /// <param name="id">The book ID.</param>
+        /// <param name="fields">The fields to set.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>The task.</returns>
+        public System.Threading.Tasks.Task SetMetadataAsync(int id, ILookup<StandardField, object?> fields, System.Threading.CancellationToken cancellationToken = default)
+        {
+            var lookup = fields
+                .SelectMany(grouping => grouping.Select(value => (Key: Serialize(grouping.Key), Value: value)))
+                .ToLookup(t => t.Key, t => t.Value, StringComparer.Ordinal);
+            return this.SetMetadataAsync(id, lookup, cancellationToken);
+        }
 
         /// <summary>
         /// Performs the 'set_metadata' function.
@@ -635,6 +670,30 @@ namespace EBook.Downloader.Calibre
 #else
             return values[^1];
 #endif
+        }
+
+        private static string Serialize(StandardField field)
+        {
+            var type = typeof(StandardField);
+            var name = Enum.GetName(type, field);
+            if (name is null)
+            {
+                return field.ToString();
+            }
+
+            var fieldInfo = type.GetField(name);
+            if (fieldInfo is null)
+            {
+                return name.ToLowerInvariant();
+            }
+
+            var attribute = fieldInfo
+                .GetCustomAttributes(inherit: false)
+                .OfType<System.Runtime.Serialization.EnumMemberAttribute>()
+                .FirstOrDefault();
+
+            return attribute?.Value
+                ?? name.ToLowerInvariant();
         }
 
         private async System.Threading.Tasks.Task<IEnumerable<int>> AddAsync(IEnumerable<System.IO.FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, System.Threading.CancellationToken cancellationToken = default)
