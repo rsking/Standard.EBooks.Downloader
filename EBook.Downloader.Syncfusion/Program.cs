@@ -8,6 +8,7 @@ using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using EBook.Downloader.Calibre;
 using EBook.Downloader.Common;
@@ -16,8 +17,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo>(Process) })
+var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, System.Threading.CancellationToken>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
+    .AddOption(new Option<bool>(new[] { "-c", "--cover" }, "Download covers"))
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
@@ -37,17 +39,20 @@ var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater")
         });
 
 return await builder
+    .CancelOnProcessTermination()
     .Build()
     .InvokeAsync(args.Select(System.Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
 
 static async Task Process(
     IHost host,
-    System.IO.DirectoryInfo calibreLibraryPath)
+    System.IO.DirectoryInfo calibreLibraryPath,
+    bool cover,
+    System.Threading.CancellationToken cancellationToken)
 {
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: false, logger);
-    var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers" }, searchPattern: "series:\"=Succinctly\"").ConfigureAwait(false);
+    var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers" }, searchPattern: "series:\"=Succinctly\"", cancellationToken: cancellationToken).ConfigureAwait(false);
     if (list is null)
     {
         return;
@@ -75,7 +80,7 @@ static async Task Process(
         return (Id: id, Title: title, Uri: uri, Isbn: isbn);
     }).ToArray();
 
-    var clientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+    var clientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     foreach (var (id, title, uri, isbn) in books)
     {
         if (uri is null)
@@ -85,7 +90,19 @@ static async Task Process(
         }
 
         // download the web page
-        var html = await uri.DownloadAsStringAsync(clientFactory).ConfigureAwait(false);
+        var client = clientFactory.CreateClient();
+        var response = await client
+            .GetAsync(uri, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogError("Could not retreive {URI} because of {StatusCode}", uri, response.StatusCode);
+            continue;
+        }
+
+        var requestUri = response.RequestMessage?.RequestUri;
+
+        var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var document = new HtmlAgilityPack.HtmlDocument();
         document.LoadHtml(html);
 
@@ -131,18 +148,103 @@ static async Task Process(
             }
         }
 
-        var fields = new System.Collections.Generic.List<(string Field, object? Value)>();
-        if (actualIsbn is not null && !string.Equals(isbn, actualIsbn, System.StringComparison.Ordinal))
+        var fields = new System.Collections.Generic.List<(StandardField Field, object? Value)>();
+        string? imagePath = default;
+        if (IsbnHasChanged(isbn, actualIsbn)
+            || UrlHasChanged(uri, requestUri))
         {
-            fields.Add(("identifiers", new Identifier("isbn", actualIsbn)));
-            fields.Add(("identifiers", new Identifier("uri", uri)));
+            if (!cover)
+            {
+                imagePath = await GetImageAsync(client, uri, document, cancellationToken).ConfigureAwait(false);
+            }
+
+            fields.Add((StandardField.Identifiers, new Identifier("isbn", actualIsbn ?? isbn)));
+            fields.Add((StandardField.Identifiers, new Identifier("uri", requestUri ?? uri)));
+        }
+
+        if (cover)
+        {
+            imagePath = await GetImageAsync(client, uri, document, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (imagePath is not null)
+        {
+            fields.Add((StandardField.Cover, imagePath));
         }
 
         if (fields.Count > 0)
         {
             await calibreDb
-                .SetMetadataAsync(id, fields.ToLookup(field => field.Field, field => field.Value, System.StringComparer.Ordinal))
+                .SetMetadataAsync(id, fields.ToLookup(field => field.Field, field => field.Value))
                 .ConfigureAwait(false);
+        }
+
+        static bool IsbnHasChanged(string isbn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualIsbn)
+        {
+            return actualIsbn is not null && !string.Equals(isbn, actualIsbn, System.StringComparison.Ordinal);
+        }
+
+        static bool UrlHasChanged(System.Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] System.Uri? requestUri)
+        {
+            return requestUri is not null && uri != requestUri;
+        }
+
+        static async ValueTask<string?> GetImageAsync(HttpClient client, System.Uri uri, HtmlAgilityPack.HtmlDocument document, System.Threading.CancellationToken cancellationToken)
+        {
+            // get the read online link
+            var readOnlineButton = document.DocumentNode
+                .Descendants("button")
+                .FirstOrDefault(d => d.HasClass("eBook_View"));
+            if (readOnlineButton is null)
+            {
+                return default;
+            }
+
+            var onClick = readOnlineButton.GetAttributeValue("onclick", default(string));
+            if (onClick is null)
+            {
+                return default;
+            }
+
+            // parse this out
+            var readOnlineUri = new System.Uri(uri, onClick
+                .Replace("location.href=", string.Empty)
+                .Trim('\''));
+
+            var html = await client
+                .GetStringAsync(readOnlineUri, cancellationToken)
+                .ConfigureAwait(false);
+
+            document = new HtmlAgilityPack.HtmlDocument();
+            document.LoadHtml(html);
+
+            var imageNode = document.DocumentNode
+                .Descendants("img")
+                .FirstOrDefault(d => d.HasClass("img-responsive"));
+
+            if (imageNode is null)
+            {
+                return default;
+            }
+
+            var src = imageNode.GetAttributeValue("src", null);
+            if (src is null)
+            {
+                return default;
+            }
+
+            var imageUri = new System.Uri(uri, src);
+
+            var fileName = System.IO.Path.GetTempFileName();
+            using var fileStream = System.IO.File.OpenWrite(fileName);
+
+            using var stream = await client
+                .GetStreamAsync(imageUri)
+                .ConfigureAwait(false);
+
+            stream.CopyTo(fileStream);
+
+            return fileName;
         }
     }
 }
