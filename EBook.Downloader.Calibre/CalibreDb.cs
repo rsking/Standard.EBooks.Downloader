@@ -408,7 +408,7 @@ namespace EBook.Downloader.Calibre
                     if (Enum.TryParse<CategoryType>(values[0]?.Trim('#'), ignoreCase: true, out var categoryType)
                         && values[1] is string tagName
                         && int.TryParse(values[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count)
-                        && int.TryParse(values[3], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var rating))
+                        && float.TryParse(values[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rating))
                     {
                         yield return new Category(
                             categoryType,
