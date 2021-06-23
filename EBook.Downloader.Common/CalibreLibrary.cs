@@ -142,11 +142,14 @@ namespace EBook.Downloader.Common
                         await this.calibreDb.AddFormatAsync(book.Id, info.Path, dontReplace: true, cancellationToken: cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (book is not null && book.Path is not null && book.Name is not null && info.Path is not null)
+                    if (book is not null && book.Path is not null && book.Name is not null)
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
                         await this.UpdateDescriptionAsync(book.Id, info.LongDescription, cancellationToken).ConfigureAwait(false);
-                        await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                        if (info.Path is not null)
+                        {
+                            await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                        }
                     }
 
                     return true;
