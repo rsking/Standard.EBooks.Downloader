@@ -208,7 +208,7 @@ static async Task Process(
 
             // parse this out
             var readOnlineUri = new System.Uri(uri, onClick
-                .Replace("location.href=", string.Empty)
+                .Replace("location.href=", string.Empty, System.StringComparison.OrdinalIgnoreCase)
                 .Trim('\''));
 
             var html = await client
