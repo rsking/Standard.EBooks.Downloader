@@ -236,13 +236,18 @@ static async Task Process(
             var imageUri = new System.Uri(uri, src);
 
             var fileName = System.IO.Path.GetTempFileName();
-            using var fileStream = System.IO.File.OpenWrite(fileName);
+            var fileStream = System.IO.File.OpenWrite(fileName);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                var stream = await client
+                    .GetStreamAsync(imageUri, cancellationToken)
+                    .ConfigureAwait(false);
 
-            using var stream = await client
-                .GetStreamAsync(imageUri, cancellationToken)
-                .ConfigureAwait(false);
-
-            stream.CopyTo(fileStream);
+                await using (stream.ConfigureAwait(false))
+                {
+                    stream.CopyTo(fileStream);
+                }
+            }
 
             return fileName;
         }
