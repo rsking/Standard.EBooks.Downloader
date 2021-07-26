@@ -521,38 +521,6 @@ namespace EBook.Downloader.Common
             throw new InvalidOperationException("Failed to get last modified time");
         }
 
-        private async Task<bool> UpdateDescriptionAsync(int id, System.Xml.XmlElement? longDescription, System.Threading.CancellationToken cancellationToken)
-        {
-            if (longDescription is null)
-            {
-                return false;
-            }
-
-            var currentLongDescription = await this.GetCurrentLongDescriptionAsync(id, cancellationToken).ConfigureAwait(false);
-
-            var fields = this.UpdateDescription(longDescription, currentLongDescription);
-
-            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
-        }
-
-        private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex, System.Threading.CancellationToken cancellationToken = default)
-        {
-            var (currentSeriesName, currentSeriesIndex) = await this.GetCurrentSeriesAsync(id, cancellationToken).ConfigureAwait(false);
-
-            var fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex);
-
-            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
-        }
-
-        private async Task<bool> UpdateSetsAsync(int id, System.Collections.Generic.IEnumerable<string> sets, System.Threading.CancellationToken cancellationToken = default)
-        {
-            var currentSets = await this.GetCurrentSetsAsync(id, cancellationToken).ConfigureAwait(false);
-
-            var fields = this.UpdateSets(sets, currentSets);
-
-            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
-        }
-
         private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
             ? Enumerable.Empty<FieldToUpdate>()
             : this.UpdateDescription(SanitiseHtml(longDescription.OuterXml), currentLongDescription);
@@ -644,45 +612,6 @@ namespace EBook.Downloader.Common
             (var seriesName, var seriesIndex) = GetCurrentSeries(json);
             var sets = GetCurrentSets(json);
             return (longDescription, seriesName, seriesIndex, sets);
-        }
-
-        private async Task<string?> GetCurrentLongDescriptionAsync(int id, System.Threading.CancellationToken cancellationToken)
-        {
-            var document = await this.calibreDb
-                .ListAsync(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            if (document is null)
-            {
-                return default;
-            }
-
-            var json = document.RootElement.EnumerateArray().First();
-
-            return GetCurrentLongDescription(json);
-        }
-
-        private async Task<(string? Name, float Index)> GetCurrentSeriesAsync(int id, System.Threading.CancellationToken cancellationToken)
-        {
-            var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (document is null)
-            {
-                return default;
-            }
-
-            return GetCurrentSeries(document.RootElement.EnumerateArray().First());
-        }
-
-        private async Task<string?> GetCurrentSetsAsync(int id, System.Threading.CancellationToken cancellationToken = default)
-        {
-            var document = await this.calibreDb.ListAsync(new[] { "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (document is null)
-            {
-                return default;
-            }
-
-            var json = document.RootElement.EnumerateArray().First();
-            return GetCurrentSets(json);
         }
 
         private async Task<bool> SetMetadataAsync(int id, System.Collections.Generic.IEnumerable<FieldToUpdate> fields, System.Threading.CancellationToken cancellationToken = default)
