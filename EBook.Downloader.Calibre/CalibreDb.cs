@@ -119,9 +119,21 @@ namespace EBook.Downloader.Calibre
                 },
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            return cancellationToken.IsCancellationRequested
-                ? default
-                : System.Text.Json.JsonDocument.Parse(stringBuilder.ToString());
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return default;
+            }
+
+            var json = stringBuilder.ToString();
+            try
+            {
+                return System.Text.Json.JsonDocument.Parse(json);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, json);
+                throw;
+            }
         }
 
         /// <summary>
