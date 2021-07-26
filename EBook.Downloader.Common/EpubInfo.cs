@@ -13,13 +13,6 @@ namespace EBook.Downloader.Common
     /// </summary>
     public record EpubInfo
     {
-        private enum CollectionType
-        {
-            None = 0,
-            Set = 1,
-            Series = 2,
-        }
-
         /// <summary>
         /// Gets the authors.
         /// </summary>
@@ -56,14 +49,9 @@ namespace EBook.Downloader.Common
         public System.Xml.XmlElement? LongDescription { get; private init; }
 
         /// <summary>
-        /// Gets the series name.
+        /// Gets the collections.
         /// </summary>
-        public string? SeriesName { get; private init; }
-
-        /// <summary>
-        /// Gets the series index.
-        /// </summary>
-        public int SeriesIndex { get; private init; }
+        public System.Collections.Generic.IEnumerable<EpubCollection> Collections { get; private init; } = Enumerable.Empty<EpubCollection>();
 
         /// <summary>
         /// Gets the path.
@@ -95,9 +83,7 @@ namespace EBook.Downloader.Common
             var (description, longDescription) = parseDescription
                 ? GetDescription(document, manager)
                 : default;
-            var (_, seriesName, _, seriesPosition) = GetCollections(document, manager)
-                .OrderByDescending(collection => (int)collection.Type)
-                .FirstOrDefault();
+            var collections = GetCollections(document, manager);
 
             return new EpubInfo
             {
@@ -108,8 +94,7 @@ namespace EBook.Downloader.Common
                 Identifiers = identifiers,
                 Description = description,
                 LongDescription = longDescription,
-                SeriesName = seriesName,
-                SeriesIndex = seriesPosition,
+                Collections = collections,
                 Path = new System.IO.FileInfo(path),
             };
 
@@ -183,7 +168,7 @@ namespace EBook.Downloader.Common
                 return (description, longDescription);
             }
 
-            static System.Collections.Generic.IEnumerable<(string Id, string Name, CollectionType Type, int Position)> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+            static System.Collections.Generic.IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
             {
                 var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
                 if (nodes is null)
@@ -197,14 +182,14 @@ namespace EBook.Downloader.Common
                     var name = node.InnerText;
 
                     var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is System.Xml.XmlNode collectionTypeNode && collectionTypeNode.InnerText is not null
-                        ? (CollectionType)System.Enum.Parse(typeof(CollectionType), collectionTypeNode.InnerText, ignoreCase: true)
-                        : CollectionType.None;
+                        ? (EpubCollectionType)System.Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
+                        : EpubCollectionType.None;
 
                     var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is System.Xml.XmlNode groupPositionNode && groupPositionNode.InnerText is not null
                         ? int.Parse(groupPositionNode.InnerText, System.Globalization.CultureInfo.InvariantCulture)
                         : 0;
 
-                    yield return (id, name, collectionType, groupPosition);
+                    yield return new EpubCollection(id, name, collectionType, groupPosition);
                 }
             }
 

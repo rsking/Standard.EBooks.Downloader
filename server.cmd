@@ -1,0 +1,1 @@
+calibre-server --disable-use-bonjour --enable-local-write --listen-on 127.0.0.1

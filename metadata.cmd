@@ -1,0 +1,1 @@
+dotnet run --project "%~dp0EBook.Downloader.Standard.EBooks" "%OneDriveConsumer%\Books" metadata --use-content-server --forced-series "%OneDriveConsumer%\Books\forced_series.txt"

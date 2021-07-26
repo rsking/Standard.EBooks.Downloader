@@ -175,7 +175,7 @@ static async Task Process(
         if (fields.Count > 0)
         {
             await calibreDb
-                .SetMetadataAsync(id, fields.ToLookup(field => field.Field, field => field.Value))
+                .SetMetadataAsync(id, fields.ToLookup(field => field.Field, field => field.Value), cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -239,7 +239,7 @@ static async Task Process(
             using var fileStream = System.IO.File.OpenWrite(fileName);
 
             using var stream = await client
-                .GetStreamAsync(imageUri)
+                .GetStreamAsync(imageUri, cancellationToken)
                 .ConfigureAwait(false);
 
             stream.CopyTo(fileStream);

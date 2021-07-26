@@ -105,6 +105,23 @@ namespace EBook.Downloader.Common
         }
 
         /// <summary>
+        /// Gets the books by publisher.
+        /// </summary>
+        /// <param name="publisher">The publisher.</param>
+        /// <param name="cancellationToken">The cancellation tokens.</param>
+        /// <returns>The books.</returns>
+        public async System.Collections.Generic.IAsyncEnumerable<CalibreBook> GetBooksByPublisherAsync(string publisher, [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
+        {
+            var searchPattern = $"publisher:\"{publisher}\"";
+            var books = await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers", "publisher" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            foreach (var book in GetCalibreBooks(books, element => element.TryGetProperty("publisher", out var publisherElement) && string.Equals(publisherElement.GetString(), publisher, StringComparison.Ordinal)))
+            {
+                yield return book;
+            }
+        }
+
+        /// <summary>
         /// Adds a new book, or updates the book if it exists in the calibre library.
         /// </summary>
         /// <param name="info">The EPUB info.</param>
@@ -142,10 +159,25 @@ namespace EBook.Downloader.Common
                         await this.calibreDb.AddFormatAsync(book.Id, info.Path, dontReplace: true, cancellationToken: cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (book is not null && book.Path is not null && book.Name is not null)
+                    if (book?.Path is not null && book.Name is not null)
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
-                        await this.UpdateDescriptionAsync(book.Id, info.LongDescription, cancellationToken).ConfigureAwait(false);
+                        var (currentLongDescription, currentSeriesName, currentSeriesIndex, currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+
+                        var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
+                        (string? seriesName, int seriesIndex) = info.Collections.FirstOrDefault(collection => collection.Type == EpubCollectionType.Series) is EpubCollection collection
+                            ? new(collection.Name, collection.Position)
+                            : default((string?, int));
+
+                        fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
+
+                        var sets = info.Collections
+                            .Where(collection => collection.Type == EpubCollectionType.Set)
+                            .Select(collection => collection.Name);
+
+                        fields = this.UpdateSets(sets, currentSets).Concat(fields);
+                        await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
+
                         if (info.Path is not null)
                         {
                             await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
@@ -177,9 +209,22 @@ namespace EBook.Downloader.Common
                         info.Path.CopyTo(fullPath, overwrite: true);
                     }
 
-                    await this.UpdateDescriptionAsync(book.Id, info.LongDescription, cancellationToken).ConfigureAwait(false);
-                    await this.UpdateSeriesAsync(book.Id, info.SeriesName, info.SeriesIndex, cancellationToken).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                    var (currentLongDescription, currentSeriesName, currentSeriesIndex, currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+
+                    var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
+                    (string? seriesName, int seriesIndex) = info.Collections.FirstOrDefault(collection => collection.Type == EpubCollectionType.Series) is EpubCollection collection
+                        ? new(collection.Name, collection.Position)
+                        : default((string?, int));
+
+                    fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
+
+                    var sets = info.Collections
+                        .Where(collection => collection.Type == EpubCollectionType.Set)
+                        .Select(collection => collection.Name);
+
+                    fields = this.UpdateSets(sets, currentSets).Concat(fields);
+                    await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
+
                     return true;
                 }
 
@@ -284,12 +329,12 @@ namespace EBook.Downloader.Common
         /// <param name="book">The book.</param>
         /// <param name="lastModified">The last modified date.</param>
         /// <param name="longDescription">The long description.</param>
-        /// <param name="seriesName">The series name.</param>
-        /// <param name="seriesIndex">The series index.</param>
+        /// <param name="series">The series.</param>
+        /// <param name="sets">The sets.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, EpubCollection? series, System.Collections.Generic.IEnumerable<EpubCollection> sets, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (book is null)
             {
@@ -298,16 +343,22 @@ namespace EBook.Downloader.Common
 
             System.Diagnostics.Contracts.Contract.EndContractBlock();
 
-            return UpdateLastModifiedDescriptionAndSeriesInternalAsync(book, lastModified, longDescription, seriesName, seriesIndex, maxTimeOffset);
+            return UpdateLastModifiedDescriptionAndSeriesInternalAsync(book, lastModified, longDescription, series?.Name, series?.Position ?? 0, sets.Select(set => set.Name), maxTimeOffset);
 
-            async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, int maxTimeOffset)
+            async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, System.Collections.Generic.IEnumerable<string> sets, int maxTimeOffset)
             {
-                if ((await this.UpdateDescriptionAsync(book.Id, longDescription, cancellationToken).ConfigureAwait(false)
-                    || await this.UpdateSeriesAsync(book.Id, seriesName, seriesIndex, cancellationToken).ConfigureAwait(false))
-                    && await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
+                var (currentLongDescription, currentSeriesName, currentSeriesIndex, currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+
+                var fields = this.UpdateDescription(longDescription, currentLongDescription);
+                fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
+                fields = this.UpdateSets(sets, currentSets).Concat(fields);
+                if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false))
                 {
                     // refresh the book with the last data
-                    book = processed;
+                    if (await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
+                    {
+                        book = processed;
+                    }
                 }
 
                 await this.UpdateLastModifiedAsync(book, lastModified, maxTimeOffset, cancellationToken).ConfigureAwait(false);
@@ -368,20 +419,23 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
+        private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBooks(document, predicate).SingleOrDefault();
+
+        private static System.Collections.Generic.IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
         {
             if (document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
             {
-                return default;
+                return Enumerable.Empty<CalibreBook>();
             }
 
             return document
               .RootElement
               .EnumerateArray()
               .Where(predicate)
-              .Select(json => new CalibreBook(json))
-              .SingleOrDefault();
+              .Select(GetCalibreBook);
         }
+
+        private static CalibreBook GetCalibreBook(System.Text.Json.JsonElement json) => new(json);
 
         private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier)
         {
@@ -392,6 +446,65 @@ namespace EBook.Downloader.Common
             }
 
             return identifierValue.Equals(identifier.Value.ToString(), StringComparison.Ordinal);
+        }
+
+        private static string? SanitiseHtml(string? html)
+        {
+            if (html is null)
+            {
+                return null;
+            }
+
+            var htmlDocument = new HtmlAgilityPack.HtmlDocument();
+            htmlDocument.LoadHtml(html);
+            return htmlDocument.DocumentNode.OuterHtml;
+        }
+
+        private static string? GetCurrentLongDescription(System.Text.Json.JsonElement json) => SanitiseHtml(json.GetProperty("comments").GetString());
+
+        private static (string? Name, float Index) GetCurrentSeries(System.Text.Json.JsonElement json)
+        {
+            return (GetSeries(json), (float)json.GetProperty("series_index").GetSingle());
+
+            static string? GetSeries(System.Text.Json.JsonElement json)
+            {
+                if (json.TryGetProperty("series", out var seriesProperty))
+                {
+                    return seriesProperty.GetString();
+                }
+
+                return default;
+            }
+        }
+
+        private static string? GetCurrentSets(System.Text.Json.JsonElement json)
+        {
+            var sets = GetSets(json);
+            return string.Join(",", sets);
+
+            static System.Collections.Generic.IEnumerable<string> GetSets(System.Text.Json.JsonElement json)
+            {
+                if (json.TryGetProperty("*sets", out var setsProperty))
+                {
+                    if (setsProperty.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var element in setsProperty.EnumerateArray())
+                        {
+                            if (element.GetString() is string set)
+                            {
+                                yield return set;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (setsProperty.GetString() is string set)
+                        {
+                            yield return set;
+                        }
+                    }
+                }
+            }
         }
 
         private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id, System.Threading.CancellationToken cancellationToken)
@@ -415,108 +528,174 @@ namespace EBook.Downloader.Common
                 return false;
             }
 
-            var document = await this.calibreDb
-                .ListAsync(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            if (document is null)
-            {
-                return false;
-            }
+            var currentLongDescription = await this.GetCurrentLongDescriptionAsync(id, cancellationToken).ConfigureAwait(false);
 
-            var json = document.RootElement.EnumerateArray().First();
-            var currentDescription = SanitiseHtml(json.GetProperty("comments").GetString());
-            var newDescription = SanitiseHtml(longDescription.OuterXml);
-            if (string.Equals(currentDescription, newDescription, StringComparison.Ordinal))
-            {
-                return false;
-            }
+            var fields = this.UpdateDescription(longDescription, currentLongDescription);
 
-            // execute calibredb to update the description
-            this.logger.LogInformation("Updating description to the long description");
-            await this.calibreDb.SetMetadataAsync(id, "comments", newDescription, cancellationToken).ConfigureAwait(false);
-            return !cancellationToken.IsCancellationRequested;
-
-            static string? SanitiseHtml(string? html)
-            {
-                if (html is null)
-                {
-                    return null;
-                }
-
-                var htmlDocument = new HtmlAgilityPack.HtmlDocument();
-                htmlDocument.LoadHtml(html);
-                return htmlDocument.DocumentNode.OuterHtml;
-            }
+            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<bool> UpdateSeriesAsync(int id, string? seriesName, float seriesIndex, System.Threading.CancellationToken cancellationToken = default)
         {
-            var (currentSeriesName, currentSeriesIndex) = await GetCurrentSeriesAsync().ConfigureAwait(false);
-            if (cancellationToken.IsCancellationRequested)
+            var (currentSeriesName, currentSeriesIndex) = await this.GetCurrentSeriesAsync(id, cancellationToken).ConfigureAwait(false);
+
+            var fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex);
+
+            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task<bool> UpdateSetsAsync(int id, System.Collections.Generic.IEnumerable<string> sets, System.Threading.CancellationToken cancellationToken = default)
+        {
+            var currentSets = await this.GetCurrentSetsAsync(id, cancellationToken).ConfigureAwait(false);
+
+            var fields = this.UpdateSets(sets, currentSets);
+
+            return await this.SetMetadataAsync(id, fields, cancellationToken).ConfigureAwait(false);
+        }
+
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
+            ? Enumerable.Empty<FieldToUpdate>()
+            : this.UpdateDescription(SanitiseHtml(longDescription.OuterXml), currentLongDescription);
+
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateDescription(string? longDescription, string? currentLongDescription)
+        {
+            if (string.Equals(currentLongDescription, longDescription, StringComparison.Ordinal))
             {
-                return false;
+                yield break;
             }
 
-            if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && (seriesName is null || currentSeriesIndex == seriesIndex))
+            // execute calibredb to update the description
+            this.logger.LogInformation("Updating description to the long description");
+            yield return new FieldToUpdate("comments", longDescription);
+        }
+
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSeries(string? name, float index, string? currentName, float currentIndex)
+        {
+            if (string.Equals(currentName, name, StringComparison.Ordinal) && (name is null || currentIndex == index))
             {
                 // neither have a series, or the indexes match in the same series.
-                return false;
+                yield break;
             }
 
-            (string Field, object? Value)[]? fields = default;
-            if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && seriesName is null)
+            if (!string.Equals(currentName, name, StringComparison.Ordinal) && name is null)
             {
                 // execute calibredb to clear the series
                 this.logger.LogInformation("Clearing series");
-                fields = new (string, object?)[] { ("series", seriesName) };
+                yield return new FieldToUpdate("series", name);
+                yield return new FieldToUpdate("series_index", 0);
             }
-            else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
+            else if (!string.Equals(currentName, name, StringComparison.Ordinal) && currentIndex != index)
             {
                 // execute calibredb to update the series index
-                this.logger.LogInformation("Updating series and index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                fields = new (string, object?)[] { ("series", seriesName), ("series_index", seriesIndex) };
+                this.logger.LogInformation("Updating series and index to {Series}:{SeriesIndex}", name, index);
+                yield return new FieldToUpdate("series", name);
+                yield return new FieldToUpdate("series_index", index);
             }
-            else if (!string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex == seriesIndex)
+            else if (!string.Equals(currentName, name, StringComparison.Ordinal) && currentIndex == index)
             {
                 // execute calibredb to update the series
-                this.logger.LogInformation("Updating series to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                fields = new (string, object?)[] { ("series", seriesName) };
+                this.logger.LogInformation("Updating series to {Series}:{SeriesIndex}", name, index);
+                yield return new FieldToUpdate("series", name);
             }
-            else if (string.Equals(currentSeriesName, seriesName, StringComparison.Ordinal) && currentSeriesIndex != seriesIndex)
+            else if (string.Equals(currentName, name, StringComparison.Ordinal) && currentIndex != index)
             {
                 // execute calibredb to update the series index
-                this.logger.LogInformation("Updating series index to {Series}:{SeriesIndex}", seriesName, seriesIndex);
-                fields = new (string, object?)[] { ("series_index", seriesIndex) };
+                this.logger.LogInformation("Updating series index to {Series}:{SeriesIndex}", name, index);
+                yield return new FieldToUpdate("series_index", index);
             }
+        }
 
-            if (fields is not null)
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(System.Collections.Generic.IEnumerable<string> sets, string? currentSets) => this.UpdateSets(string.Join(",", sets.OrderBy(_ => _)), currentSets);
+
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(string? sets, string? currentSets)
+        {
+            if (string.Equals(currentSets, sets, StringComparison.Ordinal))
             {
-                await this.calibreDb.SetMetadataAsync(id, fields.ToLookup(_ => _.Field, _ => _.Value, StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
+                // neither have a bookshelf.
+                yield break;
             }
 
-            return true;
-
-            async Task<(string?, float)> GetCurrentSeriesAsync()
+            if (string.IsNullOrEmpty(sets))
             {
-                var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (document is null)
-                {
-                    return default;
-                }
-
-                var json = document.RootElement.EnumerateArray().First();
-                return (GetSeries(json), (float)json.GetProperty("series_index").GetSingle());
-
-                static string? GetSeries(System.Text.Json.JsonElement json)
-                {
-                    if (json.TryGetProperty("series", out var seriesProperty))
-                    {
-                        return seriesProperty.GetString();
-                    }
-
-                    return default;
-                }
+                this.logger.LogInformation("Clearing sets");
             }
+            else
+            {
+                this.logger.LogInformation("Updating sets to {Sets}", sets);
+            }
+
+            yield return new FieldToUpdate("#sets", sets);
+        }
+
+        private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets)> GetCurrentAsync(int id, System.Threading.CancellationToken cancellationToken)
+        {
+            var document = await this.calibreDb
+                .ListAsync(new[] { "comments", "series", "series_index", "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            if (document is null)
+            {
+                return default;
+            }
+
+            var json = document.RootElement.EnumerateArray().First();
+
+            var longDescription = GetCurrentLongDescription(json);
+            (var seriesName, var seriesIndex) = GetCurrentSeries(json);
+            var sets = GetCurrentSets(json);
+            return (longDescription, seriesName, seriesIndex, sets);
+        }
+
+        private async Task<string?> GetCurrentLongDescriptionAsync(int id, System.Threading.CancellationToken cancellationToken)
+        {
+            var document = await this.calibreDb
+                .ListAsync(new[] { "comments" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            if (document is null)
+            {
+                return default;
+            }
+
+            var json = document.RootElement.EnumerateArray().First();
+
+            return GetCurrentLongDescription(json);
+        }
+
+        private async Task<(string? Name, float Index)> GetCurrentSeriesAsync(int id, System.Threading.CancellationToken cancellationToken)
+        {
+            var document = await this.calibreDb.ListAsync(new[] { "series", "series_index" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (document is null)
+            {
+                return default;
+            }
+
+            return GetCurrentSeries(document.RootElement.EnumerateArray().First());
+        }
+
+        private async Task<string?> GetCurrentSetsAsync(int id, System.Threading.CancellationToken cancellationToken = default)
+        {
+            var document = await this.calibreDb.ListAsync(new[] { "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (document is null)
+            {
+                return default;
+            }
+
+            var json = document.RootElement.EnumerateArray().First();
+            return GetCurrentSets(json);
+        }
+
+        private async Task<bool> SetMetadataAsync(int id, System.Collections.Generic.IEnumerable<FieldToUpdate> fields, System.Threading.CancellationToken cancellationToken = default)
+        {
+            var fieldsArray = fields.ToArray();
+
+            if (fieldsArray.Length > 0)
+            {
+                await this.calibreDb.SetMetadataAsync(id, fieldsArray.ToLookup(_ => _.Field, _ => _.Value, StringComparer.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            return false;
         }
 
         private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
@@ -556,5 +735,7 @@ namespace EBook.Downloader.Common
         private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
         private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, System.Threading.CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
+
+        private record FieldToUpdate(string Field, object? Value);
     }
 }
