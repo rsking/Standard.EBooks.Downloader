@@ -16,7 +16,7 @@ namespace EBook.Downloader.Calibre
         AuthorSort,
 
         /// <summary>
-        /// Authors
+        /// Authors.
         /// </summary>
         [System.Runtime.Serialization.EnumMember(Value = "authors")]
         Authors,

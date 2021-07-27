@@ -17,8 +17,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, System.Threading.CancellationToken>(Process) })
+var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, bool, System.Threading.CancellationToken>(Process) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
+    .AddOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .AddOption(new Option<bool>(new[] { "-c", "--cover" }, "Download covers"))
     .UseDefaults()
     .UseHost(
@@ -47,11 +48,12 @@ return await builder
 static async Task Process(
     IHost host,
     System.IO.DirectoryInfo calibreLibraryPath,
-    bool cover,
-    System.Threading.CancellationToken cancellationToken)
+    bool cover = false,
+    bool useContentServer = false,
+    System.Threading.CancellationToken cancellationToken = default)
 {
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
-    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: false, logger);
+    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer, logger);
     var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers" }, searchPattern: "series:\"=Succinctly\"", cancellationToken: cancellationToken).ConfigureAwait(false);
     if (list is null)
     {
@@ -227,7 +229,7 @@ static async Task Process(
                 return default;
             }
 
-            var src = imageNode.GetAttributeValue("src", null);
+            var src = imageNode.GetAttributeValue("src", def: null);
             if (src is null)
             {
                 return default;
@@ -245,7 +247,7 @@ static async Task Process(
 
                 await using (stream.ConfigureAwait(false))
                 {
-                    stream.CopyTo(fileStream);
+                    await stream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
                 }
             }
 

@@ -155,7 +155,7 @@ static async Task Download(
                     if (!kepub)
                     {
                         // see if we should update the date time
-                        await calibreLibrary.UpdateLastModifiedAsync(book, lastWriteTimeUtc, maxTimeOffset).ConfigureAwait(false);
+                        await calibreLibrary.UpdateLastModifiedAsync(book, lastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
                     }
                 }
                 else
@@ -215,7 +215,7 @@ static async Task Download(
             }
 
             var epubInfo = EpubInfo.Parse(path, !kepub);
-            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset).ConfigureAwait(false))
+            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
             {
                 programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
                 epubInfo.Path.Delete();
@@ -313,7 +313,7 @@ static async Task Metadata(
                 .FirstOrDefault(collection => IsSeries(collection, forcedSeriesList));
             var sets = epub.Collections
                 .Where(collection => IsSet(collection, forcedSeriesList));
-            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, series, sets, maxTimeOffset).ConfigureAwait(false);
+            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, series, sets, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
 
