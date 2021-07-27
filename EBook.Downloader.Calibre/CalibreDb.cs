@@ -125,6 +125,11 @@ namespace EBook.Downloader.Calibre
             }
 
             var json = stringBuilder.ToString();
+            if (string.IsNullOrEmpty(json))
+            {
+                return default;
+            }
+
             try
             {
                 return System.Text.Json.JsonDocument.Parse(json);
