@@ -250,7 +250,7 @@ static async Task Download(
         bool IsEPub()
         {
             return string.Equals(link.MediaType, "application/epub+zip", StringComparison.Ordinal)
-                && (link.Uri.OriginalString.EndsWith("epub3", StringComparison.InvariantCultureIgnoreCase) || System.IO.Path.GetFileNameWithoutExtension(link.Uri.OriginalString).EndsWith("_advanced", System.StringComparison.InvariantCultureIgnoreCase));
+                && (link.Uri.OriginalString.EndsWith("epub3", StringComparison.InvariantCultureIgnoreCase) || System.IO.Path.GetFileNameWithoutExtension(link.Uri.OriginalString).EndsWith("_advanced", StringComparison.InvariantCultureIgnoreCase));
         }
 
         bool IsKobo()

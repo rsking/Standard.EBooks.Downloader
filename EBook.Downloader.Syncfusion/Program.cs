@@ -11,7 +11,6 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using EBook.Downloader.Calibre;
-using EBook.Downloader.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

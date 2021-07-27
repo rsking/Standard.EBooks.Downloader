@@ -50,14 +50,14 @@ namespace EBook.Downloader.Calibre
         /// Wait for the manual reset event.
         /// </summary>
         /// <returns>A task which completes when the event is set.</returns>
-        public Task WaitAsync() => this.AwaitCompletion(AsyncManualResetEvent.WaitIndefinitly, default);
+        public Task WaitAsync() => this.AwaitCompletion(WaitIndefinitly, default);
 
         /// <summary>
         /// Wait for the manual reset event.
         /// </summary>
         /// <param name="token">A cancellation token.</param>
         /// <returns>A task which waits for the manual reset event.</returns>
-        public Task WaitAsync(CancellationToken token) => this.AwaitCompletion(AsyncManualResetEvent.WaitIndefinitly, token);
+        public Task WaitAsync(CancellationToken token) => this.AwaitCompletion(WaitIndefinitly, token);
 
         /// <summary>
         /// Wait for the manual reset event.
@@ -96,7 +96,7 @@ namespace EBook.Downloader.Calibre
         public void Reset()
         {
             // Grab a reference to the current completion source.
-            TaskCompletionSource<bool>? currentCompletionSource = this.completionSource;
+            var currentCompletionSource = this.completionSource;
 
             // Check if there is nothing to be done, return.
             if (!currentCompletionSource.Task.IsCompleted)
@@ -138,7 +138,7 @@ namespace EBook.Downloader.Calibre
             using (timeoutToken)
             {
                 // Create a task to account for our timeout. The continuation just eats the task cancelled exception, but makes sure to observe it.
-                var delayTask = Task.Delay(timeoutMS, timeoutToken.Token).ContinueWith((result) => { AggregateException? e = result.Exception; }, TaskContinuationOptions.ExecuteSynchronously);
+                var delayTask = Task.Delay(timeoutMS, timeoutToken.Token).ContinueWith((result) => { var e = result.Exception; }, TaskContinuationOptions.ExecuteSynchronously);
 
                 var resultingTask = await Task.WhenAny(this.completionSource.Task, delayTask).ConfigureAwait(false);
 

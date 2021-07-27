@@ -80,7 +80,7 @@ namespace EBook.Downloader.Common
             var tags = GetTags(document, manager);
             var identifiers = GetIdentifiers(document, manager)
                 .ToDictionary(x => x.Key, x => x.Value, System.StringComparer.Ordinal);
-            var (description, longDescription) = parseDescription
+            (var description, var longDescription) = parseDescription
                 ? GetDescription(document, manager)
                 : default;
             var collections = GetCollections(document, manager);

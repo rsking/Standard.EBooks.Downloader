@@ -58,11 +58,11 @@ namespace EBook.Downloader.Calibre
             this.Path = path;
             this.useContentServer = useContentServer;
             var builder = new UriBuilder
-                {
-                    Host = "127.0.0.1",
-                    Port = 8080,
-                    Fragment = System.IO.Path.GetFileName(path),
-                };
+            {
+                Host = "127.0.0.1",
+                Port = 8080,
+                Fragment = System.IO.Path.GetFileName(path),
+            };
             this.ContentServer = builder.Uri;
             this.logger = logger;
             this.calibreDbPath = Environment.ExpandEnvironmentVariables(System.IO.Path.Combine(calibrePath, "calibredb.exe"));
@@ -396,7 +396,7 @@ namespace EBook.Downloader.Calibre
             var command = stringBuilder.ToString();
             stringBuilder.Length = 0;
 
-            bool hasHeader = false;
+            var hasHeader = false;
             var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var end = false;
             var resetEvent = new AsyncManualResetEvent();

@@ -122,7 +122,7 @@ namespace EBook.Downloader.Common
                 var stringBuilder = new System.Text.StringBuilder();
                 var invalidChars = GetInvalidFileNameChars();
 
-                for (int i = 0; i < length; i++)
+                for (var i = 0; i < length; i++)
                 {
                     var c = normalizedString[i];
                     var unicodeCategory = char.GetUnicodeCategory(c);
