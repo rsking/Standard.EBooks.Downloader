@@ -98,6 +98,31 @@ namespace EBook.Downloader.Common
             return value;
         }
 
+        /// <summary>
+        /// Determines whether the collect is a <see cref="EpubCollectionType.Series"/>.
+        /// </summary>
+        /// <param name="collection">The collection.</param>
+        /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
+        /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Series"/>; otherwise <see langword="false"/>.</returns>
+        public static bool IsSeries(this EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries) => collection.Type switch
+        {
+            EpubCollectionType.Series => true,
+            EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) >= 0,
+            _ => false,
+        };
+
+        /// <summary>
+        /// Determines whether the collect is a <see cref="EpubCollectionType.Set"/>.
+        /// </summary>
+        /// <param name="collection">The collection.</param>
+        /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
+        /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Set"/>; otherwise <see langword="false"/>.</returns>
+        public static bool IsSet(this EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries) => collection.Type switch
+        {
+            EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) < 0,
+            _ => false,
+        };
+
         private static async Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite, System.Threading.CancellationToken cancellationToken = default)
         {
             if (!overwrite && File.Exists(fileName))

@@ -126,9 +126,14 @@ namespace EBook.Downloader.Common
         /// </summary>
         /// <param name="info">The EPUB info.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
+        /// <param name="forcedSeries">The forced series.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
-        public Task<bool> AddOrUpdateAsync(EpubInfo info, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+        public Task<bool> AddOrUpdateAsync(
+            EpubInfo info,
+            int maxTimeOffset,
+            System.Collections.Generic.IList<string>? forcedSeries = default,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             if (info is null)
             {
@@ -162,21 +167,7 @@ namespace EBook.Downloader.Common
                     if (book?.Path is not null && book.Name is not null)
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
-                        (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
-
-                        var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
-                        (var seriesName, var seriesIndex) = info.Collections.FirstOrDefault(collection => collection.Type == EpubCollectionType.Series) is EpubCollection collection
-                            ? new(collection.Name, collection.Position)
-                            : default((string?, int));
-
-                        fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
-
-                        var sets = info.Collections
-                            .Where(collection => collection.Type == EpubCollectionType.Set)
-                            .Select(collection => collection.Name);
-
-                        fields = this.UpdateSets(sets, currentSets).Concat(fields);
-                        await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
+                        await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
 
                         if (info.Path is not null)
                         {
@@ -209,21 +200,8 @@ namespace EBook.Downloader.Common
                         info.Path.CopyTo(fullPath, overwrite: true);
                     }
 
-                    (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
-
-                    var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
-                    (var seriesName, var seriesIndex) = info.Collections.FirstOrDefault(collection => collection.Type == EpubCollectionType.Series) is EpubCollection collection
-                        ? new(collection.Name, collection.Position)
-                        : default((string?, int));
-
-                    fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
-
-                    var sets = info.Collections
-                        .Where(collection => collection.Type == EpubCollectionType.Set)
-                        .Select(collection => collection.Name);
-
-                    fields = this.UpdateSets(sets, currentSets).Concat(fields);
-                    await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
+                    await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
+                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
 
                     return true;
                 }
@@ -310,6 +288,25 @@ namespace EBook.Downloader.Common
                         using var stream = System.IO.File.OpenRead(fileName);
                         return sha.ComputeHash(stream);
                     }
+                }
+
+                async Task UpdateMetadata(CalibreBook book, System.Collections.Generic.IList<string> forcedSeries)
+                {
+                    (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+
+                    var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
+                    (var seriesName, var seriesIndex) = info.Collections.FirstOrDefault(collection => collection.IsSeries(forcedSeries)) is EpubCollection collection
+                        ? new(collection.Name, collection.Position)
+                        : default((string?, int));
+
+                    fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
+
+                    var sets = info.Collections
+                        .Where(collection => collection.IsSet(forcedSeries))
+                        .Select(collection => collection.Name);
+
+                    fields = this.UpdateSets(sets, currentSets).Concat(fields);
+                    await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
                 }
 
                 void UpdateLastWriteTime(string path, string name, EpubInfo info)

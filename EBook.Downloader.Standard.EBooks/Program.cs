@@ -27,19 +27,22 @@ const int MaxTimeOffset = 180;
 
 const string AtomUrl = "https://standardebooks.org/opds/all";
 
-var downloadBuilder = new CommandBuilder(new Command("download") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int, System.Threading.CancellationToken>(Download) })
+var libraryPathArgument = new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+
+var downloadBuilder = new CommandBuilder(new Command("download") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Download) })
+    .AddArgument(libraryPathArgument)
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, () => new System.IO.DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
     .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"));
 
 var updateBuilder = new CommandBuilder(new Command("metadata") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Metadata) })
-    .AddOption(new Option<System.IO.FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series"));
+    .AddArgument(libraryPathArgument);
 
 var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader"))
-    .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
     .AddCommand(downloadBuilder.Command)
     .AddCommand(updateBuilder.Command)
     .AddGlobalOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .AddGlobalOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
+    .AddGlobalOption(new Option<System.IO.FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series"))
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
@@ -83,6 +86,7 @@ static async Task Download(
     bool useContentServer = false,
     bool resync = false,
     int maxTimeOffset = MaxTimeOffset,
+    System.IO.FileInfo? forcedSeries = default,
     System.Threading.CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
@@ -122,6 +126,10 @@ static async Task Download(
 
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+    var forcedSeriesList = forcedSeries?.Exists == true
+        ? await System.IO.File.ReadAllLinesAsync(forcedSeries.FullName, cancellationToken).ConfigureAwait(false)
+        : Array.Empty<string>();
+
     var atomUri = new Uri(AtomUrl);
     using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
@@ -215,7 +223,7 @@ static async Task Download(
             }
 
             var epubInfo = EpubInfo.Parse(path, !kepub);
-            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
+            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesList, cancellationToken).ConfigureAwait(false))
             {
                 programLogger.LogDebug("Deleting, {0} - {1} - {2}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
                 epubInfo.Path.Delete();
@@ -310,29 +318,10 @@ static async Task Metadata(
             var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
             var epub = EpubInfo.Parse(filePath, parseDescription: true);
             var series = epub.Collections
-                .FirstOrDefault(collection => IsSeries(collection, forcedSeriesList));
+                .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList));
             var sets = epub.Collections
-                .Where(collection => IsSet(collection, forcedSeriesList));
+                .Where(collection => collection.IsSet(forcedSeriesList));
             await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, series, sets, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    static bool IsSeries(EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries)
-    {
-        return collection.Type switch
-        {
-            EpubCollectionType.Series => true,
-            EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) >= 0,
-            _ => false,
-        };
-    }
-
-    static bool IsSet(EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries)
-    {
-        return collection.Type switch
-        {
-            EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) < 0,
-            _ => false,
-        };
     }
 }

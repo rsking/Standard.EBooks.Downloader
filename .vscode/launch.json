@@ -11,9 +11,13 @@
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/net5.0/EBook.Downloader.Standard.EBooks.dll",
             "args": [
+			    "download",
                 "%OneDriveConsumer%\\Books",
                 "--output-path",
-                "%USERPROFILE%\\Downloads\\books"
+                "%USERPROFILE%\\Downloads\\books",
+                "--use-content-server",
+				"--forced-series",
+                "%OneDriveConsumer%\\Books\\forced_series.txt"
             ],
             "env": {
                 "DOTNET_ENVIRONMENT" : "Development"
@@ -30,11 +34,37 @@
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/net5.0/EBook.Downloader.Standard.EBooks.dll",
             "args": [
+			    "download",
                 "%OneDriveConsumer%\\Books",
                 "--output-path",
                 "%USERPROFILE%\\Downloads\\books",
                 "--resync",
-                "--check-metadata"
+                "--use-content-server",
+				"--forced-series",
+                "%OneDriveConsumer%\\Books\\forced_series.txt"
+            ],
+            "env": {
+                "DOTNET_ENVIRONMENT" : "Development"
+            },
+            "cwd": "${workspaceFolder}/EBook.Downloader.Standard.EBooks",
+            "console": "externalTerminal",
+            "stopAtEntry": false,
+            "internalConsoleOptions": "openOnSessionStart"
+        },
+        {
+            "name": "Update Standard EBooks metadata",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/EBook.Downloader.Standard.EBooks/bin/Debug/net5.0/EBook.Downloader.Standard.EBooks.dll",
+            "args": [
+			    "metadata",
+                "%OneDriveConsumer%\\Books",
+                "--output-path",
+                "%USERPROFILE%\\Downloads\\books",
+                "--use-content-server",
+				"--forced-series",
+                "%OneDriveConsumer%\\Books\\forced_series.txt"
             ],
             "env": {
                 "DOTNET_ENVIRONMENT" : "Development"
