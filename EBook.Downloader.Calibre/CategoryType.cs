@@ -53,5 +53,10 @@ namespace EBook.Downloader.Calibre
         /// Tags category type.
         /// </summary>
         Tags,
+
+        /// <summary>
+        /// Sets category type.
+        /// </summary>
+        Sets,
     }
 }
