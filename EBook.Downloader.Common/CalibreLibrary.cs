@@ -168,11 +168,6 @@ namespace EBook.Downloader.Common
                     {
                         UpdateLastWriteTime(book.Path, book.Name, info);
                         await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
-
-                        if (info.Path is not null)
-                        {
-                            await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
-                        }
                     }
 
                     return true;
@@ -201,7 +196,6 @@ namespace EBook.Downloader.Common
                     }
 
                     await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
-                    await this.UpdateLastModifiedAsync(book, info.Path.LastWriteTime, maxTimeOffset, cancellationToken).ConfigureAwait(false);
 
                     return true;
                 }
@@ -292,21 +286,19 @@ namespace EBook.Downloader.Common
 
                 async Task UpdateMetadata(CalibreBook book, System.Collections.Generic.IList<string> forcedSeries)
                 {
-                    (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
-
-                    var fields = this.UpdateDescription(info.LongDescription, currentLongDescription);
-                    (var seriesName, var seriesIndex) = info.Collections.FirstOrDefault(collection => collection.IsSeries(forcedSeries)) is EpubCollection collection
-                        ? new(collection.Name, collection.Position)
-                        : default((string?, int));
-
-                    fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
-
+                    var series = info.Collections
+                        .FirstOrDefault(collection => collection.IsSeries(forcedSeries));
                     var sets = info.Collections
-                        .Where(collection => collection.IsSet(forcedSeries))
-                        .Select(collection => collection.Name);
+                        .Where(collection => collection.IsSet(forcedSeries));
 
-                    fields = this.UpdateSets(sets, currentSets).Concat(fields);
-                    await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false);
+                    await this.UpdateLastModifiedDescriptionAndSeriesAsync(
+                        book,
+                        info.Path?.LastWriteTime,
+                        info.LongDescription,
+                        series,
+                        sets,
+                        maxTimeOffset,
+                        cancellationToken).ConfigureAwait(false);
                 }
 
                 void UpdateLastWriteTime(string path, string name, EpubInfo info)
@@ -331,7 +323,7 @@ namespace EBook.Downloader.Common
         /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, EpubCollection? series, System.Collections.Generic.IEnumerable<EpubCollection> sets, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime? lastModified, System.Xml.XmlElement? longDescription, EpubCollection? series, System.Collections.Generic.IEnumerable<EpubCollection> sets, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (book is null)
             {
@@ -342,7 +334,7 @@ namespace EBook.Downloader.Common
 
             return UpdateLastModifiedDescriptionAndSeriesInternalAsync(book, lastModified, longDescription, series?.Name, series?.Position ?? 0, sets.Select(set => set.Name), maxTimeOffset);
 
-            async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, System.Collections.Generic.IEnumerable<string> sets, int maxTimeOffset)
+            async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime? lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, System.Collections.Generic.IEnumerable<string> sets, int maxTimeOffset)
             {
                 (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
 
@@ -358,7 +350,10 @@ namespace EBook.Downloader.Common
                     }
                 }
 
-                await this.UpdateLastModifiedAsync(book, lastModified, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                if (lastModified.HasValue)
+                {
+                    await this.UpdateLastModifiedAsync(book, lastModified.Value, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
