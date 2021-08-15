@@ -17,11 +17,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var tagsCommandBuilder = new CommandBuilder(new Command("tags") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo>(Tags) })
+var tagsCommandBuilder = new CommandBuilder(new Command("tags") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Tags) })
     .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly());
 
 var builder = new CommandLineBuilder(new RootCommand("Calibre EBook Maintenence"))
     .AddCommand(tagsCommandBuilder.Command)
+    .AddGlobalOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .UseDefaults()
     .UseHost(Host.CreateDefaultBuilder, builder => builder.ConfigureServices(services => services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true)));
 
@@ -32,9 +33,10 @@ return await builder
 
 static async Task Tags(
     IHost host,
-    System.IO.DirectoryInfo calibreLibraryPath)
+    System.IO.DirectoryInfo calibreLibraryPath,
+    bool useContentServer)
 {
-    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: false, host.Services.GetRequiredService<ILogger<CalibreDb>>());
+    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
     await foreach (var category in calibreDb
         .ListCategories()
         .Where(category => category.CategoryType == CategoryType.Tags)
