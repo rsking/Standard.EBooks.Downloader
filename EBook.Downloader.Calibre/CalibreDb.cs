@@ -388,7 +388,7 @@ namespace EBook.Downloader.Calibre
         /// </summary>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The categories.</returns>
-        public async IAsyncEnumerable<Category> ListCategories([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<Category> ShowCategoriesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
         {
             var stringBuilder = new StringBuilder();
             stringBuilder
