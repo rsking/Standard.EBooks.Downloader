@@ -139,8 +139,8 @@ static async Task Download(
     {
         // get the name, etc
         var name = string.Join(" & ", item.Authors.Select(author => author.Name));
-        programLogger.LogInformation("Processing book {Title} - {Name}", item.Title.Text, name);
-        using var bookScope = programLogger.BeginScope("{Title} - {Name}", item.Title.Text, name);
+        programLogger.LogInformation("Processing book {Title} - {Name} for {Date}", item.Title.Text, name, item.LastUpdatedTime);
+        using var bookScope = programLogger.BeginScope("{Title} - {Name} - {Date}", item.Title.Text, name, item.LastUpdatedTime);
         foreach (var uri in item.Links
             .Where(IsValidEBook)
             .Select(AbsoluteUri))
