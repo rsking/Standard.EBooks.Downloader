@@ -17,11 +17,17 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var tagsCommandBuilder = new CommandBuilder(new Command("tags") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Tags) })
-    .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly());
+var calibreLibraryPathArgument = new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+
+var tagsCommandBuilder = new CommandBuilder(new Command(nameof(Tags).ToLowerInvariant()) { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Tags) })
+    .AddArgument(calibreLibraryPathArgument);
+
+var descriptionCommandBuilder = new CommandBuilder(new Command(nameof(Description).ToLowerInvariant()) { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Description) })
+    .AddArgument(calibreLibraryPathArgument);
 
 var builder = new CommandLineBuilder(new RootCommand("Calibre EBook Maintenence"))
     .AddCommand(tagsCommandBuilder.Command)
+    .AddCommand(descriptionCommandBuilder.Command)
     .AddGlobalOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .UseDefaults()
     .UseHost(Host.CreateDefaultBuilder, builder => builder.ConfigureServices(services => services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true)));
@@ -128,5 +134,48 @@ static async Task Tags(
         }
 
         return $"{name} {character}";
+    }
+}
+
+static async Task Description(
+    IHost host,
+    System.IO.DirectoryInfo calibreLibraryPath,
+    bool useContentServer)
+{
+    var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
+    var json = await calibreDb.ListAsync(new[] { "comments", "title" }).ConfigureAwait(false);
+    if (json is null)
+    {
+        return;
+    }
+
+    foreach (var item in json.RootElement.EnumerateArray())
+    {
+        if (item.TryGetProperty("comments", out var descriptionProperty))
+        {
+            var description = descriptionProperty.GetString();
+            if (string.IsNullOrEmpty(description))
+            {
+                Console.WriteLine("{0} {1} has an empty description", GetId(item), GetTitle(item));
+            }
+            else if (description?.Contains("**", StringComparison.Ordinal) == true)
+            {
+                System.Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
+            }
+        }
+        else
+        {
+            Console.WriteLine("{0} {1} has no description", GetId(item), GetTitle(item));
+        }
+
+        static int GetId(System.Text.Json.JsonElement item)
+        {
+            return item.GetProperty("id").GetInt32();
+        }
+
+        static string? GetTitle(System.Text.Json.JsonElement item)
+        {
+            return item.GetProperty("title").GetString();
+        }
     }
 }
