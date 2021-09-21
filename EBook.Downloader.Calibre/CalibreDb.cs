@@ -324,14 +324,22 @@ namespace EBook.Downloader.Calibre
             stringBuilder.Append(id);
             foreach (var field in fields)
             {
+                var fieldString = field
+                    .Select(value => value?.ToString())
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
+                    .Select(value => value?.Replace("\"", "\"\"\"", StringComparison.Ordinal))
+#else
+                    .Select(value => value?.Replace("\"", "\"\"\""))
+#endif
+                    .Select(QuoteIfRequired);
                 stringBuilder
                     .Append(" --field ")
                     .Append(field.Key)
                     .Append(':')
-#if NETSTANDARD2_0
-                    .Append(string.Join(",", field.Select(value => value?.ToString()).Select(QuoteIfRequired)));
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
+                    .AppendJoin(",", fieldString);
 #else
-                    .AppendJoin(",", field.Select(value => value?.ToString()).Select(QuoteIfRequired));
+                    .Append(string.Join(",", fieldString));
 #endif
             }
 
