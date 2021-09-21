@@ -89,7 +89,7 @@ static async Task Tags(
                 {
                     var count = 0;
                     var currentWord = new System.Text.StringBuilder();
-                    foreach (char letter in word)
+                    foreach (var letter in word)
                     {
                         if (count == 0)
                         {

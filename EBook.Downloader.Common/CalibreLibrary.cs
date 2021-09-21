@@ -219,15 +219,9 @@ namespace EBook.Downloader.Common
                     }
 
                     // sanitise the tags
-                    var tags = default(string);
-                    if (info.Tags.Any())
-                    {
-                        var sanitisedTags = info.Tags
-                            .SelectMany(tag => tag.Split(new[] { "--" }, StringSplitOptions.RemoveEmptyEntries))
-                            .Select(tag => tag.Trim().Replace(",", ";"))
-                            .Distinct(StringComparer.Ordinal);
-                        tags = string.Join(", ", sanitisedTags);
-                    }
+                    var tags = info.Tags.Any()
+                        ? string.Join(",", SanitiseTags(info.Tags))
+                        : default;
 
                     // we need to add this
                     var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -286,19 +280,7 @@ namespace EBook.Downloader.Common
 
                 async Task UpdateMetadata(CalibreBook book, System.Collections.Generic.IList<string> forcedSeries)
                 {
-                    var series = info.Collections
-                        .FirstOrDefault(collection => collection.IsSeries(forcedSeries));
-                    var sets = info.Collections
-                        .Where(collection => collection.IsSet(forcedSeries));
-
-                    await this.UpdateLastModifiedDescriptionAndSeriesAsync(
-                        book,
-                        info.Path?.LastWriteTime,
-                        info.LongDescription,
-                        series,
-                        sets,
-                        maxTimeOffset,
-                        cancellationToken).ConfigureAwait(false);
+                    await this.UpdateAsync(book, info, forcedSeries, maxTimeOffset, cancellationToken).ConfigureAwait(false);
                 }
 
                 void UpdateLastWriteTime(string path, string name, EpubInfo info)
@@ -313,17 +295,15 @@ namespace EBook.Downloader.Common
         }
 
         /// <summary>
-        /// Updates the last modified date, description, and series.
+        /// Updates the information from the EPUB.
         /// </summary>
-        /// <param name="book">The book.</param>
-        /// <param name="lastModified">The last modified date.</param>
-        /// <param name="longDescription">The long description.</param>
-        /// <param name="series">The series.</param>
-        /// <param name="sets">The sets.</param>
+        /// <param name="book">The calibre book.</param>
+        /// <param name="epub">The EPUB info.</param>
+        /// <param name="forcedSeries">The collections that should be forced to a series.</param>
         /// <param name="maxTimeOffset">The maximum time offset.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The task associated with this function.</returns>
-        public Task UpdateLastModifiedDescriptionAndSeriesAsync(CalibreBook book, DateTime? lastModified, System.Xml.XmlElement? longDescription, EpubCollection? series, System.Collections.Generic.IEnumerable<EpubCollection> sets, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+        public Task UpdateAsync(CalibreBook book, EpubInfo epub, System.Collections.Generic.IEnumerable<string> forcedSeries, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
         {
             if (book is null)
             {
@@ -332,15 +312,26 @@ namespace EBook.Downloader.Common
 
             System.Diagnostics.Contracts.Contract.EndContractBlock();
 
-            return UpdateLastModifiedDescriptionAndSeriesInternalAsync(book, lastModified, longDescription, series?.Name, series?.Position ?? 0, sets.Select(set => set.Name), maxTimeOffset);
+            return UpdateInternalAsync(book, epub, forcedSeries.ToArray(), maxTimeOffset, cancellationToken);
 
-            async Task UpdateLastModifiedDescriptionAndSeriesInternalAsync(CalibreBook book, DateTime? lastModified, System.Xml.XmlElement? longDescription, string? seriesName, float seriesIndex, System.Collections.Generic.IEnumerable<string> sets, int maxTimeOffset)
+            async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, System.Collections.Generic.IList<string> forcedSeriesList, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
             {
-                (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+                var series = epub.Collections
+                    .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList));
+                var sets = epub.Collections
+                    .Where(collection => collection.IsSet(forcedSeriesList))
+                    .Select(collection => collection.Name);
 
-                var fields = this.UpdateDescription(longDescription, currentLongDescription);
-                fields = this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex).Concat(fields);
-                fields = this.UpdateSets(sets, currentSets).Concat(fields);
+                (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+
+                var longDescription = epub.LongDescription;
+                var seriesName = series?.Name;
+                var seriesIndex = series?.Position ?? 0;
+
+                var fields = this.UpdateDescription(longDescription, currentLongDescription)
+                    .Concat(this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex))
+                    .Concat(this.UpdateSets(sets, currentSets))
+                    .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags));
                 if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false))
                 {
                     // refresh the book with the last data
@@ -350,10 +341,7 @@ namespace EBook.Downloader.Common
                     }
                 }
 
-                if (lastModified.HasValue)
-                {
-                    await this.UpdateLastModifiedAsync(book, lastModified.Value, maxTimeOffset, cancellationToken).ConfigureAwait(false);
-                }
+                await this.UpdateLastModifiedAsync(book, epub.Path.LastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -499,6 +487,138 @@ namespace EBook.Downloader.Common
             }
         }
 
+        private static System.Collections.Generic.IEnumerable<string> GetCurrentTags(System.Text.Json.JsonElement json)
+        {
+            if (json.TryGetProperty("tags", out var setsProperty))
+            {
+                if (setsProperty.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var element in setsProperty.EnumerateArray())
+                    {
+                        if (element.GetString() is string tag)
+                        {
+                            yield return tag;
+                        }
+                    }
+                }
+                else
+                {
+                    if (setsProperty.GetString() is string tag)
+                    {
+                        yield return tag;
+                    }
+                }
+            }
+        }
+
+        private static System.Collections.Generic.IEnumerable<string> SanitiseTags(System.Collections.Generic.IEnumerable<string> tags)
+        {
+            return tags.SelectMany(SplitByDashes)
+                .Select(tag => tag.Trim())
+                .Select(CaseCorrectly)
+                .Select(ReplaceCommas)
+                .Distinct(StringComparer.Ordinal);
+
+            static System.Collections.Generic.IEnumerable<string> SplitByDashes(string value)
+            {
+                return value.Split(new string[] { "--" }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            static string ReplaceCommas(string tag)
+            {
+                return tag.Replace(',', '‚');
+            }
+
+            static string CaseCorrectly(string value)
+            {
+                var (name, character) = Split(value);
+
+                return Join(ToProperCase(name)!.Replace(" and ", " & "), ToProperCase(character));
+
+                static (string Name, string? Character) Split(string value)
+                {
+                    var index = value.IndexOf('(');
+                    if (index == -1)
+                    {
+                        return (value, default);
+                    }
+
+                    return (value.Substring(0, index - 1), value.Substring(index));
+                }
+
+                static string Join(string name, string? character)
+                {
+                    if (character is null)
+                    {
+                        return name;
+                    }
+
+                    return $"{name} {character}";
+                }
+
+                static string? ToProperCase(string? strX)
+                {
+                    if (strX is null)
+                    {
+                        return null;
+                    }
+
+                    return ToProperCaseImpl(strX, ' ', " ", System.Globalization.CultureInfo.CurrentCulture.TextInfo);
+
+                    static string ToProperCaseImpl(string strX, char separator, string join, System.Globalization.TextInfo textInfo)
+                    {
+                        var words = new System.Collections.Generic.List<string>();
+                        var split = strX.Trim().Split(separator);
+                        const int first = 0;
+                        var last = split.Length - 1;
+
+                        foreach (var (word, index) in split.Select((w, i) => (word: w.Trim(), index: i)))
+                        {
+                            if (index != first
+                                && index != last
+                                && Words.LowerCase.Contains(word, StringComparer.OrdinalIgnoreCase))
+                            {
+                                words.Add(textInfo.ToLower(word));
+                                continue;
+                            }
+
+                            if (word.Contains('-'))
+                            {
+                                words.Add(ToProperCaseImpl(word, '-', "-", textInfo));
+                            }
+                            else
+                            {
+                                words.Add(ProcessWord(word, textInfo));
+                            }
+                        }
+
+                        return string.Join(join, words);
+
+                        static string ProcessWord(string word, System.Globalization.TextInfo textInfo)
+                        {
+                            var count = 0;
+                            var currentWord = new System.Text.StringBuilder();
+                            foreach (var letter in word)
+                            {
+                                if (count == 0)
+                                {
+                                    currentWord.Append(textInfo.ToUpper(letter));
+                                }
+                                else
+                                {
+                                    currentWord.Append(letter);
+                                }
+
+                                count++;
+                            }
+
+                            return currentWord.ToString();
+                        }
+                    }
+                }
+            }
+        }
+
         private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id, System.Threading.CancellationToken cancellationToken)
         {
             this.selectLastModifiedCommand.Parameters[":id"].Value = id;
@@ -565,32 +685,63 @@ namespace EBook.Downloader.Common
             }
         }
 
-        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(System.Collections.Generic.IEnumerable<string> sets, string? currentSets) => this.UpdateSets(string.Join(",", sets.OrderBy(_ => _)), currentSets);
-
-        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(string? sets, string? currentSets)
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(System.Collections.Generic.IEnumerable<string> sets, string? currentSets)
         {
-            if (string.Equals(currentSets, sets, StringComparison.Ordinal))
-            {
-                // neither have a bookshelf.
-                yield break;
-            }
+            return UpdateSetsInternal(string.Join(",", sets.OrderBy(_ => _)), currentSets);
 
-            if (string.IsNullOrEmpty(sets))
+            System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSetsInternal(string? sets, string? currentSets)
             {
-                this.logger.LogInformation("Clearing sets");
-            }
-            else
-            {
-                this.logger.LogInformation("Updating sets to {Sets}", sets);
-            }
+                if (string.Equals(currentSets, sets, StringComparison.Ordinal))
+                {
+                    // neither have a bookshelf.
+                    yield break;
+                }
 
-            yield return new FieldToUpdate("#sets", sets);
+                if (string.IsNullOrEmpty(sets))
+                {
+                    this.logger.LogInformation("Clearing sets");
+                }
+                else
+                {
+                    this.logger.LogInformation("Updating sets to {Sets}", sets);
+                }
+
+                yield return new FieldToUpdate("#sets", sets);
+            }
         }
 
-        private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets)> GetCurrentAsync(int id, System.Threading.CancellationToken cancellationToken)
+        private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateTags(System.Collections.Generic.IEnumerable<string> tags, System.Collections.Generic.IEnumerable<string> currentTags)
+        {
+            return UpdatetTagsInternal(tags, currentTags);
+
+            System.Collections.Generic.IEnumerable<FieldToUpdate> UpdatetTagsInternal(System.Collections.Generic.IEnumerable<string> tags, System.Collections.Generic.IEnumerable<string> currentTags)
+            {
+                var tagsString = string.Join(",", tags.OrderBy(_ => _));
+                var currentTagsString = string.Join(",", currentTags.OrderBy(_ => _));
+
+                if (string.Equals(currentTagsString, tagsString, StringComparison.Ordinal))
+                {
+                    // neither have tags.
+                    yield break;
+                }
+
+                if (string.IsNullOrEmpty(tagsString))
+                {
+                    this.logger.LogInformation("Clearing tags");
+                }
+                else
+                {
+                    this.logger.LogInformation("Updating tags to {Tags}", tagsString);
+                }
+
+                yield return new FieldToUpdate("tags", tagsString);
+            }
+        }
+
+        private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, System.Collections.Generic.IEnumerable<string> Tags)> GetCurrentAsync(int id, System.Threading.CancellationToken cancellationToken)
         {
             var document = await this.calibreDb
-                .ListAsync(new[] { "comments", "series", "series_index", "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+                .ListAsync(new[] { "comments", "tags", "series", "series_index", "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             if (document is null)
@@ -603,7 +754,8 @@ namespace EBook.Downloader.Common
             var longDescription = GetCurrentLongDescription(json);
             (var seriesName, var seriesIndex) = GetCurrentSeries(json);
             var sets = GetCurrentSets(json);
-            return (longDescription, seriesName, seriesIndex, sets);
+            var tags = GetCurrentTags(json);
+            return (longDescription, seriesName, seriesIndex, sets, tags);
         }
 
         private async Task<bool> SetMetadataAsync(int id, System.Collections.Generic.IEnumerable<FieldToUpdate> fields, System.Threading.CancellationToken cancellationToken = default)
@@ -658,5 +810,26 @@ namespace EBook.Downloader.Common
         private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, System.Threading.CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
 
         private record FieldToUpdate(string Field, object? Value);
+
+        private static class Words
+        {
+            public static readonly System.Collections.Generic.IEnumerable<string> LowerCase = new[]
+            {
+                "a",
+                "for",
+                "of",
+                "on",
+                "and",
+                "in",
+                "the",
+                "it",
+                "it",
+                "it's",
+                "as",
+                "to",
+                "ca.",
+                "into",
+            };
+        }
     }
 }

@@ -315,13 +315,7 @@ static async Task Metadata(
         var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
         if (System.IO.File.Exists(filePath))
         {
-            var lastWriteTimeUtc = System.IO.File.GetLastWriteTimeUtc(filePath);
-            var epub = EpubInfo.Parse(filePath, parseDescription: true);
-            var series = epub.Collections
-                .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList));
-            var sets = epub.Collections
-                .Where(collection => collection.IsSet(forcedSeriesList));
-            await calibreLibrary.UpdateLastModifiedDescriptionAndSeriesAsync(book, lastWriteTimeUtc, epub.LongDescription, series, sets, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesList, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
 }
