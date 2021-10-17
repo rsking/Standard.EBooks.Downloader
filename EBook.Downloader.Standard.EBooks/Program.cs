@@ -311,7 +311,7 @@ static async Task Download(
     {
         // create the file name
         var fileName = uri.GetFileName();
-        var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, fileName));
+        var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(path, GetHashedName(fileName)));
         if (!System.IO.File.Exists(fullPath))
         {
             logger.LogInformation("Downloading book {0}", fileName);
@@ -327,6 +327,11 @@ static async Task Download(
         }
 
         return fullPath;
+
+        static string GetHashedName(string fileName)
+        {
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", fileName.GetHashCode()) + System.IO.Path.GetExtension(fileName);
+        }
     }
 }
 
