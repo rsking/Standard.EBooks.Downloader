@@ -29,10 +29,34 @@ const string AtomUrl = "https://standardebooks.org/opds/all";
 
 var libraryPathArgument = new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
 
-var downloadBuilder = new CommandBuilder(new Command("download") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Download) })
+var downloadBuilder = new CommandBuilder(new Command("download") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, System.IO.DirectoryInfo, bool, bool, DateTime?, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Download) })
     .AddArgument(libraryPathArgument)
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, () => new System.IO.DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
-    .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"));
+    .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
+    .AddOption(new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, false, "The time to download books after"));
+
+static DateTime? ParseArgument(ArgumentResult result)
+{
+    var dateString = result.Tokens.First();
+    return Parse(dateString.Value);
+
+    static DateTime? Parse(string? dateString)
+    {
+        if (string.IsNullOrEmpty(dateString))
+        {
+            return null;
+        }
+
+        var parser = new ChronicNetCore.Parser();
+        var parsedSpan = parser.Parse(dateString);
+        if (parsedSpan is null)
+        {
+            return default;
+        }
+
+        return parsedSpan.Start;
+    }
+}
 
 var updateBuilder = new CommandBuilder(new Command("metadata") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Metadata) })
     .AddArgument(libraryPathArgument);
@@ -85,6 +109,7 @@ static async Task Download(
     System.IO.DirectoryInfo outputPath,
     bool useContentServer = false,
     bool resync = false,
+    DateTime? after = default,
     int maxTimeOffset = MaxTimeOffset,
     System.IO.FileInfo? forcedSeries = default,
     System.Threading.CancellationToken cancellationToken = default)
@@ -120,9 +145,19 @@ static async Task Download(
         System.IO.File.SetLastWriteTimeUtc(sentinelPath, new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc));
     }
 
-    var sentinelDateTime = resync
-        ? DateTime.MinValue.ToUniversalTime()
-        : System.IO.File.GetLastWriteTimeUtc(sentinelPath);
+    DateTime sentinelDateTime;
+    if (after is not null)
+    {
+        sentinelDateTime = after.Value;
+    }
+    else if (resync)
+    {
+        sentinelDateTime = DateTime.MinValue.ToUniversalTime();
+    }
+    else
+    {
+        sentinelDateTime = System.IO.File.GetLastWriteTimeUtc(sentinelPath);
+    }
 
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
