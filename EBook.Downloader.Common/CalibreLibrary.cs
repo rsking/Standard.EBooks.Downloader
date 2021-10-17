@@ -489,11 +489,11 @@ namespace EBook.Downloader.Common
 
         private static System.Collections.Generic.IEnumerable<string> GetCurrentTags(System.Text.Json.JsonElement json)
         {
-            if (json.TryGetProperty("tags", out var setsProperty))
+            if (json.TryGetProperty("tags", out var tagsProperty))
             {
-                if (setsProperty.ValueKind == System.Text.Json.JsonValueKind.Array)
+                if (tagsProperty.ValueKind == System.Text.Json.JsonValueKind.Array)
                 {
-                    foreach (var element in setsProperty.EnumerateArray())
+                    foreach (var element in tagsProperty.EnumerateArray())
                     {
                         if (element.GetString() is string tag)
                         {
@@ -503,7 +503,7 @@ namespace EBook.Downloader.Common
                 }
                 else
                 {
-                    if (setsProperty.GetString() is string tag)
+                    if (tagsProperty.GetString() is string tag)
                     {
                         yield return tag;
                     }
