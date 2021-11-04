@@ -6,12 +6,10 @@
 
 namespace EBook.Downloader.Common;
 
-using System.Linq;
-
 /// <summary>
 /// EPUB information.
 /// </summary>
-public record CalibreBook
+public record class CalibreBook
 {
     /// <summary>
     /// Initialises a new instance of the <see cref="CalibreBook"/> class.
@@ -23,13 +21,13 @@ public record CalibreBook
 
         // authors
         var authors = element.GetProperty("authors").GetString()
-            ?? throw new System.ArgumentException("Failed to get authors", nameof(element));
+            ?? throw new ArgumentException("Failed to get authors", nameof(element));
         this.Authors = authors.Split('&').Select(author => author.Trim()).ToArray();
         var sanitizedAuthor = Sanitise(this.Authors[0]);
 
         // name
         var name = element.GetProperty("title").GetString()
-            ?? throw new System.ArgumentException("Failed to get title", nameof(element));
+            ?? throw new ArgumentException("Failed to get title", nameof(element));
         var sanitisedName = Sanitise(name.Trim());
         this.Name = $"{TrimIfRequired(sanitisedName, 31)} - {sanitizedAuthor}";
 
@@ -64,7 +62,7 @@ public record CalibreBook
     /// <summary>
     /// Gets the authors.
     /// </summary>
-    public System.Collections.Generic.IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
+    public IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
 
     /// <summary>
     /// Gets the Path.
@@ -74,7 +72,7 @@ public record CalibreBook
     /// <summary>
     /// Gets the last modified time.
     /// </summary>
-    public System.DateTime LastModified { get; init; }
+    public DateTime LastModified { get; init; }
 
     /// <summary>
     /// Gets the file info.
@@ -87,12 +85,12 @@ public record CalibreBook
         var paths = GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension));
         return System.IO.Path.Combine(paths.ToArray());
 
-        static System.Collections.Generic.IEnumerable<string> GetEnumerable(string value)
+        static IEnumerable<string> GetEnumerable(string value)
         {
             yield return value;
         }
 
-        static System.Collections.Generic.IEnumerable<string> GetPathsSegments(string path)
+        static IEnumerable<string> GetPathsSegments(string path)
         {
             return path.Split(System.IO.Path.AltDirectorySeparatorChar);
         }

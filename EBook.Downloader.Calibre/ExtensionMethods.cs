@@ -4,7 +4,6 @@
 
 namespace EBook.Downloader.Calibre;
 
-using System;
 using System.Text;
 
 /// <summary>
@@ -62,14 +61,14 @@ internal static class ExtensionMethods
     /// <param name="process">The process.</param>
     /// <param name="milliseconds">The amount of time, in milliseconds, to wait for the associated process to exit. A value of 0 specifies an immediate return, and a value of -1 specifies an infinite wait.</param>
     /// <returns><see langword="true"/> if the associated process has exited; otherwise, <see langword="false"/>.</returns>
-    public static System.Threading.Tasks.Task<bool> WaitForExitAsync(this System.Diagnostics.Process process, int milliseconds) => System.Threading.Tasks.Task.Run(() => process.WaitForExit(milliseconds));
+    public static Task<bool> WaitForExitAsync(this System.Diagnostics.Process process, int milliseconds) => System.Threading.Tasks.Task.Run(() => process.WaitForExit(milliseconds));
 
     /// <summary>
     /// Instructs the Process component to wait indefinitely for the associated process to exit asynchronously.
     /// </summary>
     /// <param name="process">The process.</param>
     /// <returns>The async task.</returns>
-    public static System.Threading.Tasks.Task WaitForExitAsync(this System.Diagnostics.Process process) => process.HasExited
+    public static Task WaitForExitAsync(this System.Diagnostics.Process process) => process.HasExited
         ? System.Threading.Tasks.Task.CompletedTask
         : System.Threading.Tasks.Task.Run(() => process.WaitForExit());
 }

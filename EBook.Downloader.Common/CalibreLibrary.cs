@@ -6,9 +6,6 @@
 
 namespace EBook.Downloader.Common;
 
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -93,7 +90,7 @@ public class CalibreLibrary : IDisposable
     /// <param name="extension">The extension to check.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The book.</returns>
-    public Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension, System.Threading.CancellationToken cancellationToken = default)
+    public Task<CalibreBook?> GetBookByIdentifierAndExtensionAsync(string identifier, string type, string extension, CancellationToken cancellationToken = default)
     {
         if (identifier is null)
         {
@@ -110,7 +107,7 @@ public class CalibreLibrary : IDisposable
     /// <param name="publisher">The publisher.</param>
     /// <param name="cancellationToken">The cancellation tokens.</param>
     /// <returns>The books.</returns>
-    public async System.Collections.Generic.IAsyncEnumerable<CalibreBook> GetBooksByPublisherAsync(string publisher, [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<CalibreBook> GetBooksByPublisherAsync(string publisher, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var searchPattern = $"publisher:\"{publisher}\"";
         var books = await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers", "publisher" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -132,8 +129,8 @@ public class CalibreLibrary : IDisposable
     public Task<bool> AddOrUpdateAsync(
         EpubInfo info,
         int maxTimeOffset,
-        System.Collections.Generic.IList<string>? forcedSeries = default,
-        System.Threading.CancellationToken cancellationToken = default)
+        IList<string>? forcedSeries = default,
+        CancellationToken cancellationToken = default)
     {
         if (info is null)
         {
@@ -235,9 +232,9 @@ public class CalibreLibrary : IDisposable
                     : await this.GetCalibreBookAsync(bookId, cancellationToken).ConfigureAwait(false);
             }
 
-            static bool CheckFiles(System.IO.FileInfo source, string destination, ILogger logger)
+            static bool CheckFiles(FileInfo source, string destination, ILogger logger)
             {
-                var destinationFileInfo = new System.IO.FileInfo(destination);
+                var destinationFileInfo = new FileInfo(destination);
                 if (source.LastWriteTime != destinationFileInfo.LastWriteTime)
                 {
                     logger.LogDebug("source and destination have different modified dates");
@@ -278,7 +275,7 @@ public class CalibreLibrary : IDisposable
                 }
             }
 
-            async Task UpdateMetadata(CalibreBook book, System.Collections.Generic.IList<string> forcedSeries)
+            async Task UpdateMetadata(CalibreBook book, IList<string> forcedSeries)
             {
                 await this.UpdateAsync(book, info, forcedSeries, maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
@@ -288,7 +285,7 @@ public class CalibreLibrary : IDisposable
                 var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{info.Path.Extension}");
                 if (System.IO.File.Exists(fullPath))
                 {
-                    _ = new System.IO.FileInfo(fullPath) { LastWriteTime = info.Path.LastWriteTime };
+                    _ = new FileInfo(fullPath) { LastWriteTime = info.Path.LastWriteTime };
                 }
             }
         }
@@ -303,7 +300,7 @@ public class CalibreLibrary : IDisposable
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task associated with this function.</returns>
-    public Task UpdateAsync(CalibreBook book, EpubInfo epub, System.Collections.Generic.IEnumerable<string> forcedSeries, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+    public Task UpdateAsync(CalibreBook book, EpubInfo epub, IEnumerable<string> forcedSeries, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (book is null)
         {
@@ -314,7 +311,7 @@ public class CalibreLibrary : IDisposable
 
         return UpdateInternalAsync(book, epub, forcedSeries.ToArray(), maxTimeOffset, cancellationToken);
 
-        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, System.Collections.Generic.IList<string> forcedSeriesList, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, IList<string> forcedSeriesList, int maxTimeOffset, CancellationToken cancellationToken = default)
         {
             var series = epub.Collections
                 .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList));
@@ -353,7 +350,7 @@ public class CalibreLibrary : IDisposable
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task associated with this function.</returns>
-    public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+    public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (book is null)
         {
@@ -401,7 +398,7 @@ public class CalibreLibrary : IDisposable
 
     private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBooks(document, predicate).SingleOrDefault();
 
-    private static System.Collections.Generic.IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
+    private static IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
     {
         if (document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
         {
@@ -462,7 +459,7 @@ public class CalibreLibrary : IDisposable
         var sets = GetSets(json);
         return string.Join(",", sets);
 
-        static System.Collections.Generic.IEnumerable<string> GetSets(System.Text.Json.JsonElement json)
+        static IEnumerable<string> GetSets(System.Text.Json.JsonElement json)
         {
             if (json.TryGetProperty("*sets", out var setsProperty))
             {
@@ -487,7 +484,7 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private static System.Collections.Generic.IEnumerable<string> GetCurrentTags(System.Text.Json.JsonElement json)
+    private static IEnumerable<string> GetCurrentTags(System.Text.Json.JsonElement json)
     {
         if (json.TryGetProperty("tags", out var tagsProperty))
         {
@@ -511,7 +508,7 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private static System.Collections.Generic.IEnumerable<string> SanitiseTags(System.Collections.Generic.IEnumerable<string> tags)
+    private static IEnumerable<string> SanitiseTags(IEnumerable<string> tags)
     {
         return tags.SelectMany(SplitByDashes)
             .Select(tag => tag.Trim())
@@ -519,7 +516,7 @@ public class CalibreLibrary : IDisposable
             .Select(ReplaceCommas)
             .Distinct(StringComparer.Ordinal);
 
-        static System.Collections.Generic.IEnumerable<string> SplitByDashes(string value)
+        static IEnumerable<string> SplitByDashes(string value)
         {
             return value.Split(new string[] { "--" }, StringSplitOptions.RemoveEmptyEntries);
         }
@@ -567,7 +564,7 @@ public class CalibreLibrary : IDisposable
 
                 static string ToProperCaseImpl(string strX, char separator, string join, System.Globalization.TextInfo textInfo)
                 {
-                    var words = new System.Collections.Generic.List<string>();
+                    var words = new List<string>();
                     var split = strX.Trim().Split(separator);
                     const int first = 0;
                     var last = split.Length - 1;
@@ -619,7 +616,7 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id, System.Threading.CancellationToken cancellationToken)
+    private async Task<DateTime> GetDateTimeFromDatabaseAsync(int id, CancellationToken cancellationToken)
     {
         this.selectLastModifiedCommand.Parameters[":id"].Value = id;
         var dateTimeObject = await this.selectLastModifiedCommand
@@ -633,11 +630,11 @@ public class CalibreLibrary : IDisposable
         throw new InvalidOperationException("Failed to get last modified time");
     }
 
-    private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
+    private IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
         ? Enumerable.Empty<FieldToUpdate>()
         : this.UpdateDescription(SanitiseHtml(longDescription.OuterXml), currentLongDescription);
 
-    private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateDescription(string? longDescription, string? currentLongDescription)
+    private IEnumerable<FieldToUpdate> UpdateDescription(string? longDescription, string? currentLongDescription)
     {
         if (string.Equals(currentLongDescription, longDescription, StringComparison.Ordinal))
         {
@@ -649,7 +646,7 @@ public class CalibreLibrary : IDisposable
         yield return new FieldToUpdate("comments", longDescription);
     }
 
-    private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSeries(string? name, float index, string? currentName, float currentIndex)
+    private IEnumerable<FieldToUpdate> UpdateSeries(string? name, float index, string? currentName, float currentIndex)
     {
         if (string.Equals(currentName, name, StringComparison.Ordinal) && (name is null || currentIndex == index))
         {
@@ -685,11 +682,11 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSets(System.Collections.Generic.IEnumerable<string> sets, string? currentSets)
+    private IEnumerable<FieldToUpdate> UpdateSets(IEnumerable<string> sets, string? currentSets)
     {
         return UpdateSetsInternal(string.Join(",", sets.OrderBy(_ => _)), currentSets);
 
-        System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateSetsInternal(string? sets, string? currentSets)
+        IEnumerable<FieldToUpdate> UpdateSetsInternal(string? sets, string? currentSets)
         {
             if (string.Equals(currentSets, sets, StringComparison.Ordinal))
             {
@@ -710,11 +707,11 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private System.Collections.Generic.IEnumerable<FieldToUpdate> UpdateTags(System.Collections.Generic.IEnumerable<string> tags, System.Collections.Generic.IEnumerable<string> currentTags)
+    private IEnumerable<FieldToUpdate> UpdateTags(IEnumerable<string> tags, IEnumerable<string> currentTags)
     {
         return UpdatetTagsInternal(tags, currentTags);
 
-        System.Collections.Generic.IEnumerable<FieldToUpdate> UpdatetTagsInternal(System.Collections.Generic.IEnumerable<string> tags, System.Collections.Generic.IEnumerable<string> currentTags)
+        IEnumerable<FieldToUpdate> UpdatetTagsInternal(IEnumerable<string> tags, IEnumerable<string> currentTags)
         {
             var tagsString = string.Join(",", tags.OrderBy(_ => _));
             var currentTagsString = string.Join(",", currentTags.OrderBy(_ => _));
@@ -738,7 +735,7 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, System.Collections.Generic.IEnumerable<string> Tags)> GetCurrentAsync(int id, System.Threading.CancellationToken cancellationToken)
+    private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags)> GetCurrentAsync(int id, CancellationToken cancellationToken)
     {
         var document = await this.calibreDb
             .ListAsync(new[] { "comments", "tags", "series", "series_index", "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
@@ -758,7 +755,7 @@ public class CalibreLibrary : IDisposable
         return (longDescription, seriesName, seriesIndex, sets, tags);
     }
 
-    private async Task<bool> SetMetadataAsync(int id, System.Collections.Generic.IEnumerable<FieldToUpdate> fields, System.Threading.CancellationToken cancellationToken = default)
+    private async Task<bool> SetMetadataAsync(int id, IEnumerable<FieldToUpdate> fields, CancellationToken cancellationToken = default)
     {
         var fieldsArray = fields.ToArray();
 
@@ -771,7 +768,7 @@ public class CalibreLibrary : IDisposable
         return false;
     }
 
-    private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset, System.Threading.CancellationToken cancellationToken = default)
+    private async Task UpdateLastModifiedAsync(int id, string name, DateTime fileLastModified, DateTime lastModified, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (fileLastModified == lastModified)
         {
@@ -801,19 +798,19 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private Task<CalibreBook?> GetCalibreBookAsync(int id, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""), _ => true, cancellationToken);
+    private Task<CalibreBook?> GetCalibreBookAsync(int id, CancellationToken cancellationToken) => this.GetCalibreBookAsync(FormattableString.Invariant($"id:\"={id}\""), _ => true, cancellationToken);
 
-    private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier), cancellationToken);
+    private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
-    private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format, System.Threading.CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier), cancellationToken);
+    private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format, CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
-    private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, System.Threading.CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
+    private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
 
-    private record FieldToUpdate(string Field, object? Value);
+    private record class FieldToUpdate(string Field, object? Value);
 
     private static class Words
     {
-        public static readonly System.Collections.Generic.IEnumerable<string> LowerCase = new[]
+        public static readonly IEnumerable<string> LowerCase = new[]
         {
                 "a",
                 "for",

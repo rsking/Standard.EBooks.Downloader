@@ -9,7 +9,7 @@ namespace EBook.Downloader.Calibre;
 /// </summary>
 /// <param name="Name">The name.</param>
 /// <param name="Value">The value.</param>
-public record Identifier(string Name, object Value)
+public record class Identifier(string Name, object Value)
 {
     /// <inheritdoc/>
     public override string ToString() => System.FormattableString.Invariant($"{this.Name}:{this.Value}");

@@ -13,4 +13,4 @@ namespace EBook.Downloader.Common;
 /// <param name="Name">The name.</param>
 /// <param name="Type">The collection type.</param>
 /// <param name="Position">The position.</param>
-public record EpubCollection(string Id, string Name, EpubCollectionType Type, int Position);
+public record class EpubCollection(string Id, string Name, EpubCollectionType Type, int Position);

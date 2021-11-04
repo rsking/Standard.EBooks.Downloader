@@ -6,8 +6,6 @@
 
 namespace EBook.Downloader.Maintenance;
 
-using System.Collections.Generic;
-
 /// <summary>
 /// Class for words.
 /// </summary>

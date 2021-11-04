@@ -4,9 +4,6 @@
 
 namespace EBook.Downloader.Calibre;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -91,7 +88,7 @@ public class CalibreDb
     /// <param name="limit">The maximum number of results to display. Default: all.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The JSON document.</returns>
-    public async System.Threading.Tasks.Task<System.Text.Json.JsonDocument?> ListAsync(IEnumerable<string>? fields = default, string sortBy = DefaultSortBy, bool ascending = default, string? searchPattern = default, int lineWidth = DefaultLineWidth, string? separator = DefaultSeparator, string? prefix = default, int limit = DefaultLimit, System.Threading.CancellationToken cancellationToken = default)
+    public async Task<System.Text.Json.JsonDocument?> ListAsync(IEnumerable<string>? fields = default, string sortBy = DefaultSortBy, bool ascending = default, string? searchPattern = default, int lineWidth = DefaultLineWidth, string? separator = DefaultSeparator, string? prefix = default, int limit = DefaultLimit, CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder();
         var fieldsValue = fields is null ? string.Empty : string.Join(",", fields);
@@ -146,7 +143,7 @@ public class CalibreDb
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The book ID.</returns>
-    public async System.Threading.Tasks.Task<int> AddEmptyAsync(System.Threading.CancellationToken cancellationToken = default) => (await this.AddAsync(Enumerable.Empty<System.IO.FileInfo>(), empty: true, cancellationToken: cancellationToken).ConfigureAwait(false)).Single();
+    public async Task<int> AddEmptyAsync(CancellationToken cancellationToken = default) => (await this.AddAsync(Enumerable.Empty<FileInfo>(), empty: true, cancellationToken: cancellationToken).ConfigureAwait(false)).Single();
 
     /// <summary>
     /// Performs the 'add' function.
@@ -165,7 +162,7 @@ public class CalibreDb
     /// <param name="languages">A comma separated list of languages (best to use ISO639 language codes, though some language names may also be recognized).</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The book ID.</returns>
-    public async System.Threading.Tasks.Task<int> AddAsync(System.IO.FileInfo file, bool duplicates = false, AutoMerge autoMerge = default, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, System.Threading.CancellationToken cancellationToken = default)
+    public async Task<int> AddAsync(FileInfo file, bool duplicates = false, AutoMerge autoMerge = default, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, CancellationToken cancellationToken = default)
     {
         var results = await this.AddAsync(
             new[] { file },
@@ -193,7 +190,7 @@ public class CalibreDb
     /// <param name="dontReplace">Set to <see langword="true"/> to not replace the format if it already exists.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task AddFormatAsync(int id, System.IO.FileInfo ebookFile, bool dontReplace = false, System.Threading.CancellationToken cancellationToken = default)
+    public Task AddFormatAsync(int id, FileInfo ebookFile, bool dontReplace = false, CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder()
             .AppendIf(dontReplace, " --dont-replace")
@@ -211,7 +208,7 @@ public class CalibreDb
     /// <param name="searchExpression">The search expression.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The IDs.</returns>
-    public async IAsyncEnumerable<int> SearchAsync(string searchExpression, [System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<int> SearchAsync(string searchExpression, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var results = new System.Collections.Concurrent.ConcurrentQueue<int>();
         var end = false;
@@ -264,7 +261,7 @@ public class CalibreDb
     /// <param name="value">The value.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, StandardField field, object? value, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
+    public Task SetMetadataAsync(int id, StandardField field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.
@@ -274,7 +271,7 @@ public class CalibreDb
     /// <param name="value">The value.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, object? value, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
+    public Task SetMetadataAsync(int id, string field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.
@@ -284,7 +281,7 @@ public class CalibreDb
     /// <param name="values">The values.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, StandardField field, IEnumerable<object?> values, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, Serialize(field), values, cancellationToken);
+    public Task SetMetadataAsync(int id, StandardField field, IEnumerable<object?> values, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, Serialize(field), values, cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.
@@ -294,7 +291,7 @@ public class CalibreDb
     /// <param name="values">The values.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, string field, IEnumerable<object?> values, System.Threading.CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, values.ToLookup(_ => field, value => value, StringComparer.Ordinal), cancellationToken);
+    public Task SetMetadataAsync(int id, string field, IEnumerable<object?> values, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, values.ToLookup(_ => field, value => value, StringComparer.Ordinal), cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.
@@ -303,7 +300,7 @@ public class CalibreDb
     /// <param name="fields">The fields to set.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, ILookup<StandardField, object?> fields, System.Threading.CancellationToken cancellationToken = default)
+    public Task SetMetadataAsync(int id, ILookup<StandardField, object?> fields, CancellationToken cancellationToken = default)
     {
         var lookup = fields
             .SelectMany(grouping => grouping.Select(value => (Key: Serialize(grouping.Key), Value: value)))
@@ -318,7 +315,7 @@ public class CalibreDb
     /// <param name="fields">The fields to set.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public System.Threading.Tasks.Task SetMetadataAsync(int id, ILookup<string, object?> fields, System.Threading.CancellationToken cancellationToken = default)
+    public Task SetMetadataAsync(int id, ILookup<string, object?> fields, CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder();
         stringBuilder.Append(id);
@@ -352,11 +349,11 @@ public class CalibreDb
     /// <param name="id">The ID.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The OPF package.</returns>
-    public async System.Threading.Tasks.Task<Opf.Package> ShowMetadataAsync(int id, System.Threading.CancellationToken cancellationToken = default)
+    public async Task<Opf.Package> ShowMetadataAsync(int id, CancellationToken cancellationToken = default)
     {
         const int BufferSize = 4096;
-        using var memoryStream = new System.IO.MemoryStream(BufferSize);
-        var writer = new System.IO.StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true);
+        using var memoryStream = new MemoryStream(BufferSize);
+        var writer = new StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true);
 #if NETSTANDARD2_0
         using (writer)
 #else
@@ -396,7 +393,7 @@ public class CalibreDb
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The categories.</returns>
-    public async IAsyncEnumerable<Category> ShowCategoriesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Category> ShowCategoriesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder();
         stringBuilder
@@ -721,7 +718,7 @@ public class CalibreDb
             ?? name.ToLowerInvariant();
     }
 
-    private async System.Threading.Tasks.Task<IEnumerable<int>> AddAsync(IEnumerable<System.IO.FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, System.Threading.CancellationToken cancellationToken = default)
+    private async Task<IEnumerable<int>> AddAsync(IEnumerable<FileInfo> files, bool duplicates = false, AutoMerge autoMerge = default, bool empty = false, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder();
         stringBuilder
@@ -776,7 +773,7 @@ public class CalibreDb
         return bookIds;
     }
 
-    private async System.Threading.Tasks.Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default, System.Threading.CancellationToken cancellationToken = default)
+    private async Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default, CancellationToken cancellationToken = default)
     {
         var path = this.useContentServer
             ? this.ContentServer.ToString()

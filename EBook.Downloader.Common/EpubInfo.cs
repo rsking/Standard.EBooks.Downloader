@@ -6,17 +6,15 @@
 
 namespace EBook.Downloader.Common;
 
-using System.Linq;
-
 /// <summary>
 /// EPUB information.
 /// </summary>
-public record EpubInfo
+public record class EpubInfo
 {
     /// <summary>
     /// Gets the authors.
     /// </summary>
-    public System.Collections.Generic.IEnumerable<string> Authors { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Authors { get; private init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the title.
@@ -26,17 +24,17 @@ public record EpubInfo
     /// <summary>
     /// Gets the publishers.
     /// </summary>
-    public System.Collections.Generic.IEnumerable<string> Publishers { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Publishers { get; private init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the tags.
     /// </summary>
-    public System.Collections.Generic.IEnumerable<string> Tags { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Tags { get; private init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the identifiers.
     /// </summary>
-    public System.Collections.Generic.IReadOnlyDictionary<string, string> Identifiers { get; private init; } = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty;
+    public IReadOnlyDictionary<string, string> Identifiers { get; private init; } = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty;
 
     /// <summary>
     /// Gets the description.
@@ -51,12 +49,12 @@ public record EpubInfo
     /// <summary>
     /// Gets the collections.
     /// </summary>
-    public System.Collections.Generic.IEnumerable<EpubCollection> Collections { get; private init; } = Enumerable.Empty<EpubCollection>();
+    public IEnumerable<EpubCollection> Collections { get; private init; } = Enumerable.Empty<EpubCollection>();
 
     /// <summary>
     /// Gets the path.
     /// </summary>
-    public System.IO.FileInfo Path { get; private init; } = new System.IO.FileInfo(System.Environment.SystemDirectory);
+    public FileInfo Path { get; private init; } = new FileInfo(System.Environment.SystemDirectory);
 
     /// <summary>
     /// Parses EPUB information from a path.
@@ -95,10 +93,10 @@ public record EpubInfo
             Description = description,
             LongDescription = longDescription,
             Collections = collections,
-            Path = new System.IO.FileInfo(path),
+            Path = new FileInfo(path),
         };
 
-        static System.Collections.Generic.IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        static IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
             var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
             if (publisher is not null)
@@ -113,7 +111,7 @@ public record EpubInfo
             }
         }
 
-        static System.Collections.Generic.IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        static IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
             var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
             if (author is not null)
@@ -128,7 +126,7 @@ public record EpubInfo
             }
         }
 
-        static System.Collections.Generic.IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        static IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
             var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
             if (collection is not null)
@@ -143,7 +141,7 @@ public record EpubInfo
             }
         }
 
-        static System.Collections.Generic.IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        static IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
             var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
             if (identifier is null)
@@ -168,7 +166,7 @@ public record EpubInfo
             return (description, longDescription);
         }
 
-        static System.Collections.Generic.IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        static IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
             var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
             if (nodes is null)
@@ -199,7 +197,7 @@ public record EpubInfo
             var content = zip.GetEntry("epub/content.opf");
 
             using var stream = content.Open();
-            using var reader = new System.IO.StreamReader(stream);
+            using var reader = new StreamReader(stream);
 
             return reader.ReadToEnd();
         }

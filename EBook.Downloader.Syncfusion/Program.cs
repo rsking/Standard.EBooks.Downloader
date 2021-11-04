@@ -7,17 +7,15 @@ using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using System.Linq;
-using System.Net.Http;
-using System.Threading.Tasks;
+
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, bool, System.Threading.CancellationToken>(Process) })
-    .AddArgument(new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
+var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, DirectoryInfo, bool, bool, CancellationToken>(Process) })
+    .AddArgument(new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
     .AddOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
     .AddOption(new Option<bool>(new[] { "-c", "--cover" }, "Download covers"))
     .UseDefaults()
@@ -28,7 +26,7 @@ var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater")
             configureHost
                 .UseSerilog((_, loggerConfiguration) => loggerConfiguration
                     .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
-                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(System.Net.Http.HttpClient).FullName ?? string.Empty))
+                    .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(HttpClient).FullName ?? string.Empty))
                     .Enrich.WithThreadId());
             configureHost
                 .ConfigureServices((_, services) =>
@@ -46,10 +44,10 @@ return await builder
 
 static async Task Process(
     IHost host,
-    System.IO.DirectoryInfo calibreLibraryPath,
+    DirectoryInfo calibreLibraryPath,
     bool cover = false,
     bool useContentServer = false,
-    System.Threading.CancellationToken cancellationToken = default)
+    CancellationToken cancellationToken = default)
 {
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer, logger);
@@ -63,13 +61,13 @@ static async Task Process(
     {
         var id = element.GetProperty("id").GetInt32();
         var title = element.GetProperty("title").GetString();
-        System.Uri? uri = default;
+        Uri? uri = default;
         string? isbn = default;
         if (element.TryGetProperty("identifiers", out var identifiersElement))
         {
             if (identifiersElement.TryGetProperty("uri", out var uriElement) && uriElement.GetString() is string uriString)
             {
-                uri = new System.Uri(uriString);
+                uri = new Uri(uriString);
             }
 
             if (identifiersElement.TryGetProperty("isbn", out var isbnElement) && isbnElement.GetString() is string isbnString)
@@ -109,7 +107,7 @@ static async Task Process(
 
         var detailsSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("details-section"));
         string? actualIsbn = default;
-        System.DateTime? publishedOn = default;
+        DateTime? publishedOn = default;
         if (detailsSections is not null)
         {
             foreach (var detailsSection in detailsSections.Where(node => node.HasChildNodes))
@@ -149,7 +147,7 @@ static async Task Process(
             }
         }
 
-        var fields = new System.Collections.Generic.List<(StandardField Field, object? Value)>();
+        var fields = new List<(StandardField Field, object? Value)>();
         string? imagePath = default;
         if (IsbnHasChanged(isbn, actualIsbn)
             || UrlHasChanged(uri, requestUri))
@@ -185,12 +183,12 @@ static async Task Process(
             return actualIsbn is not null && !string.Equals(isbn, actualIsbn, System.StringComparison.Ordinal);
         }
 
-        static bool UrlHasChanged(System.Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] System.Uri? requestUri)
+        static bool UrlHasChanged(Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Uri? requestUri)
         {
             return requestUri is not null && uri != requestUri;
         }
 
-        static async ValueTask<string?> GetImageAsync(HttpClient client, System.Uri uri, HtmlAgilityPack.HtmlDocument document, System.Threading.CancellationToken cancellationToken)
+        static async ValueTask<string?> GetImageAsync(HttpClient client, Uri uri, HtmlAgilityPack.HtmlDocument document, CancellationToken cancellationToken)
         {
             // get the read online link
             var readOnlineButton = document.DocumentNode
@@ -208,7 +206,7 @@ static async Task Process(
             }
 
             // parse this out
-            var readOnlineUri = new System.Uri(uri, onClick
+            var readOnlineUri = new Uri(uri, onClick
                 .Replace("location.href=", string.Empty, System.StringComparison.OrdinalIgnoreCase)
                 .Trim('\''));
 
@@ -234,7 +232,7 @@ static async Task Process(
                 return default;
             }
 
-            var imageUri = new System.Uri(uri, src);
+            var imageUri = new Uri(uri, src);
 
             var fileName = System.IO.Path.GetTempFileName();
             var fileStream = System.IO.File.OpenWrite(fileName);

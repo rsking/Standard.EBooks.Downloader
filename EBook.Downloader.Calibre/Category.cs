@@ -7,4 +7,4 @@ namespace EBook.Downloader.Calibre;
 /// <summary>
 /// Represents a category.
 /// </summary>
-public record Category(CategoryType CategoryType, string TagName, int Count, float Rating);
+public record class Category(CategoryType CategoryType, string TagName, int Count, float Rating);

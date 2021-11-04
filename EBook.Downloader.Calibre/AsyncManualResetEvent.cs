@@ -4,10 +4,6 @@
 
 namespace EBook.Downloader.Calibre;
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
 /// <summary>
 /// Async manual reset event.
 /// </summary>

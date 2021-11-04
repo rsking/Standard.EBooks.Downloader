@@ -6,17 +6,13 @@
 
 namespace EBook.Downloader.Common;
 
-using System.IO;
-using System.Net.Http;
-using System.Threading.Tasks;
-
 /// <summary>
 /// Extension methods.
 /// </summary>
 public static class ExtensionMethods
 {
     /// <summary>
-    /// Checks to see whether the specified <see cref="System.Uri" /> needs to be downloaded based on the last modified date.
+    /// Checks to see whether the specified <see cref="Uri" /> needs to be downloaded based on the last modified date.
     /// </summary>
     /// <param name="uri">The uri to check.</param>
     /// <param name="dateTime">The last modified date time.</param>
@@ -24,7 +20,7 @@ public static class ExtensionMethods
     /// <param name="modifier">The URI modifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>Returns the download URI if the last modified date does not match; otherwise <see langword="null"/>.</returns>
-    public static async Task<System.Uri?> ShouldDownloadAsync(this System.Uri uri, System.DateTime dateTime, IHttpClientFactory? clientFactory = default, System.Func<System.Uri, System.Uri>? modifier = default, System.Threading.CancellationToken cancellationToken = default)
+    public static async Task<Uri?> ShouldDownloadAsync(this Uri uri, DateTime dateTime, IHttpClientFactory? clientFactory = default, Func<Uri, Uri>? modifier = default, CancellationToken cancellationToken = default)
     {
         using var handler = clientFactory is null
             ? new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None }
@@ -36,7 +32,7 @@ public static class ExtensionMethods
         var lastModified = await GetDateTimeOffsetAsync(uri, client, cancellationToken).ConfigureAwait(false);
         if (!lastModified.HasValue && modifier is not null)
         {
-            System.Uri updated;
+            Uri updated;
             while ((updated = modifier(uri)) != uri)
             {
                 uri = updated;
@@ -52,7 +48,7 @@ public static class ExtensionMethods
             ? uri
             : default;
 
-        static async Task<System.DateTimeOffset?> GetDateTimeOffsetAsync(System.Uri uri, HttpClient client, System.Threading.CancellationToken cancellationToken)
+        static async Task<DateTimeOffset?> GetDateTimeOffsetAsync(Uri uri, HttpClient client, CancellationToken cancellationToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Head, uri);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
@@ -63,7 +59,7 @@ public static class ExtensionMethods
     }
 
     /// <summary>
-    /// Downloads the specified <see cref="System.Uri" /> as a file.
+    /// Downloads the specified <see cref="Uri" /> as a file.
     /// </summary>
     /// <param name="uri">The uri to download.</param>
     /// <param name="fileName">The file name to download to.</param>
@@ -71,7 +67,7 @@ public static class ExtensionMethods
     /// <param name="clientFactory">The client factory.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task to download the file.</returns>
-    public static async Task DownloadAsFileAsync(this System.Uri uri, string fileName, bool overwrite, IHttpClientFactory? clientFactory = null, System.Threading.CancellationToken cancellationToken = default)
+    public static async Task DownloadAsFileAsync(this Uri uri, string fileName, bool overwrite, IHttpClientFactory? clientFactory = null, CancellationToken cancellationToken = default)
     {
         using var client = clientFactory is null
             ? new HttpClient()
@@ -82,13 +78,13 @@ public static class ExtensionMethods
     }
 
     /// <summary>
-    /// Downloads the specified <see cref="System.Uri" /> as a string.
+    /// Downloads the specified <see cref="Uri" /> as a string.
     /// </summary>
     /// <param name="uri">The uri to download.</param>
     /// <param name="clientFactory">The client factory.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task to download the string.</returns>
-    public static async Task<string> DownloadAsStringAsync(this System.Uri uri, IHttpClientFactory? clientFactory = null, System.Threading.CancellationToken cancellationToken = default)
+    public static async Task<string> DownloadAsStringAsync(this Uri uri, IHttpClientFactory? clientFactory = null, CancellationToken cancellationToken = default)
     {
         using var client = clientFactory is null
             ? new HttpClient()
@@ -104,7 +100,7 @@ public static class ExtensionMethods
     /// <param name="collection">The collection.</param>
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Series"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSeries(this EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries) => collection.Type switch
+    public static bool IsSeries(this EpubCollection collection, IList<string> forcedSeries) => collection.Type switch
     {
         EpubCollectionType.Series => true,
         EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) >= 0,
@@ -117,17 +113,17 @@ public static class ExtensionMethods
     /// <param name="collection">The collection.</param>
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Set"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSet(this EpubCollection collection, System.Collections.Generic.IList<string> forcedSeries) => collection.Type switch
+    public static bool IsSet(this EpubCollection collection, IList<string> forcedSeries) => collection.Type switch
     {
         EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) < 0,
         _ => false,
     };
 
-    private static async Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite, System.Threading.CancellationToken cancellationToken = default)
+    private static async Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite, CancellationToken cancellationToken = default)
     {
         if (!overwrite && File.Exists(fileName))
         {
-            throw new System.InvalidOperationException($"\"{fileName}\" already exists.");
+            throw new InvalidOperationException($"\"{fileName}\" already exists.");
         }
 
         var pathName = Path.GetFullPath(fileName);

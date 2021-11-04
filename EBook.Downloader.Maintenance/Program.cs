@@ -4,20 +4,18 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using System.Linq;
-using System.Threading.Tasks;
+
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var calibreLibraryPathArgument = new Argument<System.IO.DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+var calibreLibraryPathArgument = new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
 
 var tagsCommandBuilder = new CommandBuilder(new Command(nameof(Tags).ToLowerInvariant()) { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Tags) })
     .AddArgument(calibreLibraryPathArgument);
@@ -39,7 +37,7 @@ return await builder
 
 static async Task Tags(
     IHost host,
-    System.IO.DirectoryInfo calibreLibraryPath,
+    DirectoryInfo calibreLibraryPath,
     bool useContentServer)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
@@ -64,7 +62,7 @@ static async Task Tags(
 
             static string ToProperCaseImpl(string strX, char separator, System.Globalization.TextInfo textInfo)
             {
-                var words = new System.Collections.Generic.List<string>();
+                var words = new List<string>();
                 var split = strX.Trim().Split(separator);
                 const int first = 0;
                 var last = split.Length - 1;
@@ -139,7 +137,7 @@ static async Task Tags(
 
 static async Task Description(
     IHost host,
-    System.IO.DirectoryInfo calibreLibraryPath,
+    DirectoryInfo calibreLibraryPath,
     bool useContentServer)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());

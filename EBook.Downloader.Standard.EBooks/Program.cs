@@ -4,14 +4,12 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using System.Linq;
-using System.Threading.Tasks;
+
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
 using Microsoft.Extensions.DependencyInjection;
