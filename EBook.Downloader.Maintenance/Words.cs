@@ -4,20 +4,20 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace EBook.Downloader.Maintenance
-{
-    using System.Collections.Generic;
+namespace EBook.Downloader.Maintenance;
 
+using System.Collections.Generic;
+
+/// <summary>
+/// Class for words.
+/// </summary>
+internal static class Words
+{
     /// <summary>
-    /// Class for words.
+    /// Words that should be lower case.
     /// </summary>
-    internal static class Words
+    public static readonly IEnumerable<string> LowerCase = new[]
     {
-        /// <summary>
-        /// Words that should be lower case.
-        /// </summary>
-        public static readonly IEnumerable<string> LowerCase = new[]
-        {
             "a",
             "for",
             "of",
@@ -33,5 +33,4 @@ namespace EBook.Downloader.Maintenance
             "ca.",
             "into",
         };
-    }
 }

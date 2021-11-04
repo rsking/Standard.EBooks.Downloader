@@ -4,149 +4,148 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-namespace EBook.Downloader.Common
+namespace EBook.Downloader.Common;
+
+using System.Linq;
+
+/// <summary>
+/// EPUB information.
+/// </summary>
+public record CalibreBook
 {
-    using System.Linq;
+    /// <summary>
+    /// Initialises a new instance of the <see cref="CalibreBook"/> class.
+    /// </summary>
+    /// <param name="element">The element.</param>
+    public CalibreBook(System.Text.Json.JsonElement element)
+    {
+        this.Id = element.GetProperty("id").GetInt32();
+
+        // authors
+        var authors = element.GetProperty("authors").GetString()
+            ?? throw new System.ArgumentException("Failed to get authors", nameof(element));
+        this.Authors = authors.Split('&').Select(author => author.Trim()).ToArray();
+        var sanitizedAuthor = Sanitise(this.Authors[0]);
+
+        // name
+        var name = element.GetProperty("title").GetString()
+            ?? throw new System.ArgumentException("Failed to get title", nameof(element));
+        var sanitisedName = Sanitise(name.Trim());
+        this.Name = $"{TrimIfRequired(sanitisedName, 31)} - {sanitizedAuthor}";
+
+        // path
+        this.Path = System.FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
+        this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
+
+        static string TrimIfRequired(string input, int length)
+        {
+            return input.Length > length
+                ? input.Substring(0, length).TrimEnd()
+                : input;
+        }
+    }
 
     /// <summary>
-    /// EPUB information.
+    /// Initialises a new instance of the <see cref="CalibreBook" /> class.
     /// </summary>
-    public record CalibreBook
+    /// <param name="lastModified">The book last modified date.</param>
+    public CalibreBook(string lastModified) => this.LastModified = System.DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+
+    /// <summary>
+    /// Gets the ID.
+    /// </summary>
+    public int Id { get; init; }
+
+    /// <summary>
+    /// Gets the Name.
+    /// </summary>
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the authors.
+    /// </summary>
+    public System.Collections.Generic.IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the Path.
+    /// </summary>
+    public string Path { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the last modified time.
+    /// </summary>
+    public System.DateTime LastModified { get; init; }
+
+    /// <summary>
+    /// Gets the file info.
+    /// </summary>
+    /// <param name="path">The base path.</param>
+    /// <param name="extension">The extension.</param>
+    /// <returns>The file info for the book.</returns>
+    public string GetFullPath(string path, string extension)
     {
-        /// <summary>
-        /// Initialises a new instance of the <see cref="CalibreBook"/> class.
-        /// </summary>
-        /// <param name="element">The element.</param>
-        public CalibreBook(System.Text.Json.JsonElement element)
+        var paths = GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension));
+        return System.IO.Path.Combine(paths.ToArray());
+
+        static System.Collections.Generic.IEnumerable<string> GetEnumerable(string value)
         {
-            this.Id = element.GetProperty("id").GetInt32();
-
-            // authors
-            var authors = element.GetProperty("authors").GetString()
-                ?? throw new System.ArgumentException("Failed to get authors", nameof(element));
-            this.Authors = authors.Split('&').Select(author => author.Trim()).ToArray();
-            var sanitizedAuthor = Sanitise(this.Authors[0]);
-
-            // name
-            var name = element.GetProperty("title").GetString()
-                ?? throw new System.ArgumentException("Failed to get title", nameof(element));
-            var sanitisedName = Sanitise(name.Trim());
-            this.Name = $"{TrimIfRequired(sanitisedName, 31)} - {sanitizedAuthor}";
-
-            // path
-            this.Path = System.FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
-            this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
-
-            static string TrimIfRequired(string input, int length)
-            {
-                return input.Length > length
-                    ? input.Substring(0, length).TrimEnd()
-                    : input;
-            }
+            yield return value;
         }
 
-        /// <summary>
-        /// Initialises a new instance of the <see cref="CalibreBook" /> class.
-        /// </summary>
-        /// <param name="lastModified">The book last modified date.</param>
-        public CalibreBook(string lastModified) => this.LastModified = System.DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
-
-        /// <summary>
-        /// Gets the ID.
-        /// </summary>
-        public int Id { get; init; }
-
-        /// <summary>
-        /// Gets the Name.
-        /// </summary>
-        public string Name { get; init; } = string.Empty;
-
-        /// <summary>
-        /// Gets the authors.
-        /// </summary>
-        public System.Collections.Generic.IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
-
-        /// <summary>
-        /// Gets the Path.
-        /// </summary>
-        public string Path { get; init; } = string.Empty;
-
-        /// <summary>
-        /// Gets the last modified time.
-        /// </summary>
-        public System.DateTime LastModified { get; init; }
-
-        /// <summary>
-        /// Gets the file info.
-        /// </summary>
-        /// <param name="path">The base path.</param>
-        /// <param name="extension">The extension.</param>
-        /// <returns>The file info for the book.</returns>
-        public string GetFullPath(string path, string extension)
+        static System.Collections.Generic.IEnumerable<string> GetPathsSegments(string path)
         {
-            var paths = GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension));
-            return System.IO.Path.Combine(paths.ToArray());
-
-            static System.Collections.Generic.IEnumerable<string> GetEnumerable(string value)
-            {
-                yield return value;
-            }
-
-            static System.Collections.Generic.IEnumerable<string> GetPathsSegments(string path)
-            {
-                return path.Split(System.IO.Path.AltDirectorySeparatorChar);
-            }
+            return path.Split(System.IO.Path.AltDirectorySeparatorChar);
         }
+    }
 
-        private static char[] GetInvalidFileNameChars() => new char[]
-        {
+    private static char[] GetInvalidFileNameChars() => new char[]
+    {
             '\"', '<', '>', '|', '\0',
             (char)1, (char)2, (char)3, (char)4, (char)5, (char)6, (char)7, (char)8, (char)9, (char)10,
             (char)11, (char)12, (char)13, (char)14, (char)15, (char)16, (char)17, (char)18, (char)19, (char)20,
             (char)21, (char)22, (char)23, (char)24, (char)25, (char)26, (char)27, (char)28, (char)29, (char)30,
             (char)31, ':', '*', '?', '\\', '/',
-        };
+    };
 
-        private static string Sanitise(string input)
+    private static string Sanitise(string input)
+    {
+        var length = input.Length;
+        var inputChars = input.ToCharArray();
+        var outputChars = new char[4 * length];
+
+        var characters = Lucene.Net.Analysis.Miscellaneous.ASCIIFoldingFilter.FoldToASCII(inputChars, 0, outputChars, 0, length);
+
+        return RemoveOthers(outputChars, characters);
+
+        static string RemoveOthers(char[] normalizedString, int length)
         {
-            var length = input.Length;
-            var inputChars = input.ToCharArray();
-            var outputChars = new char[4 * length];
+            var stringBuilder = new System.Text.StringBuilder();
+            var invalidChars = GetInvalidFileNameChars();
 
-            var characters = Lucene.Net.Analysis.Miscellaneous.ASCIIFoldingFilter.FoldToASCII(inputChars, 0, outputChars, 0, length);
-
-            return RemoveOthers(outputChars, characters);
-
-            static string RemoveOthers(char[] normalizedString, int length)
+            for (var i = 0; i < length; i++)
             {
-                var stringBuilder = new System.Text.StringBuilder();
-                var invalidChars = GetInvalidFileNameChars();
-
-                for (var i = 0; i < length; i++)
+                var c = normalizedString[i];
+                var unicodeCategory = char.GetUnicodeCategory(c);
+                if (c > 128)
                 {
-                    var c = normalizedString[i];
-                    var unicodeCategory = char.GetUnicodeCategory(c);
-                    if (c > 128)
-                    {
-                        stringBuilder.Append('_').Append('_');
-                    }
-                    else if (invalidChars.Contains(c))
-                    {
-                        stringBuilder.Append('_');
-                    }
-                    else if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
-                    {
-                        stringBuilder.Append(c);
-                    }
+                    stringBuilder.Append('_').Append('_');
                 }
-
-                if (stringBuilder[stringBuilder.Length - 1] == '.')
+                else if (invalidChars.Contains(c))
                 {
-                    stringBuilder[stringBuilder.Length - 1] = '_';
+                    stringBuilder.Append('_');
                 }
-
-                return stringBuilder.ToString();
+                else if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
             }
+
+            if (stringBuilder[stringBuilder.Length - 1] == '.')
+            {
+                stringBuilder[stringBuilder.Length - 1] = '_';
+            }
+
+            return stringBuilder.ToString();
         }
     }
 }

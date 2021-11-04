@@ -2,31 +2,30 @@
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
 
-namespace EBook.Downloader.Calibre
+namespace EBook.Downloader.Calibre;
+
+/// <summary>
+/// The auto-merge enumeration.
+/// </summary>
+public enum AutoMerge
 {
     /// <summary>
-    /// The auto-merge enumeration.
+    /// Default.
     /// </summary>
-    public enum AutoMerge
-    {
-        /// <summary>
-        /// Default.
-        /// </summary>
-        Default,
+    Default,
 
-        /// <summary>
-        /// Ignore.
-        /// </summary>
-        Ignore,
+    /// <summary>
+    /// Ignore.
+    /// </summary>
+    Ignore,
 
-        /// <summary>
-        /// Overwrite.
-        /// </summary>
-        Overwrite,
+    /// <summary>
+    /// Overwrite.
+    /// </summary>
+    Overwrite,
 
-        /// <summary>
-        /// New record.
-        /// </summary>
-        NewRecord,
-    }
+    /// <summary>
+    /// New record.
+    /// </summary>
+    NewRecord,
 }

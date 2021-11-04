@@ -2,61 +2,60 @@
 // Copyright (c) RossKing. All rights reserved.
 // </copyright>
 
-namespace EBook.Downloader.Calibre
+namespace EBook.Downloader.Calibre;
+
+/// <summary>
+/// The <see cref="Category"/> type.
+/// </summary>
+public enum CategoryType
 {
     /// <summary>
-    /// The <see cref="Category"/> type.
+    /// Authors category type.
     /// </summary>
-    public enum CategoryType
-    {
-        /// <summary>
-        /// Authors category type.
-        /// </summary>
-        Authors,
+    Authors,
 
-        /// <summary>
-        /// Bookshelf category type.
-        /// </summary>
-        Bookshelf,
+    /// <summary>
+    /// Bookshelf category type.
+    /// </summary>
+    Bookshelf,
 
-        /// <summary>
-        /// Formats category type.
-        /// </summary>
-        Formats,
+    /// <summary>
+    /// Formats category type.
+    /// </summary>
+    Formats,
 
-        /// <summary>
-        /// Identifiers category type.
-        /// </summary>
-        Identifiers,
+    /// <summary>
+    /// Identifiers category type.
+    /// </summary>
+    Identifiers,
 
-        /// <summary>
-        /// Languages category type.
-        /// </summary>
-        Languages,
+    /// <summary>
+    /// Languages category type.
+    /// </summary>
+    Languages,
 
-        /// <summary>
-        /// Publisher category type.
-        /// </summary>
-        Publisher,
+    /// <summary>
+    /// Publisher category type.
+    /// </summary>
+    Publisher,
 
-        /// <summary>
-        /// Rating category type.
-        /// </summary>
-        Rating,
+    /// <summary>
+    /// Rating category type.
+    /// </summary>
+    Rating,
 
-        /// <summary>
-        /// Series category type.
-        /// </summary>
-        Series,
+    /// <summary>
+    /// Series category type.
+    /// </summary>
+    Series,
 
-        /// <summary>
-        /// Tags category type.
-        /// </summary>
-        Tags,
+    /// <summary>
+    /// Tags category type.
+    /// </summary>
+    Tags,
 
-        /// <summary>
-        /// Sets category type.
-        /// </summary>
-        Sets,
-    }
+    /// <summary>
+    /// Sets category type.
+    /// </summary>
+    Sets,
 }
