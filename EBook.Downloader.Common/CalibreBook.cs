@@ -32,7 +32,7 @@ public record class CalibreBook
         this.Name = $"{TrimIfRequired(sanitisedName, 31)} - {sanitizedAuthor}";
 
         // path
-        this.Path = System.FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
+        this.Path = FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
         this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
 
         static string TrimIfRequired(string input, int length)
@@ -47,7 +47,7 @@ public record class CalibreBook
     /// Initialises a new instance of the <see cref="CalibreBook" /> class.
     /// </summary>
     /// <param name="lastModified">The book last modified date.</param>
-    public CalibreBook(string lastModified) => this.LastModified = System.DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
+    public CalibreBook(string lastModified) => this.LastModified = DateTime.Parse(lastModified, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
 
     /// <summary>
     /// Gets the ID.
@@ -62,7 +62,7 @@ public record class CalibreBook
     /// <summary>
     /// Gets the authors.
     /// </summary>
-    public IReadOnlyList<string> Authors { get; init; } = System.Array.Empty<string>();
+    public IReadOnlyList<string> Authors { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Gets the Path.

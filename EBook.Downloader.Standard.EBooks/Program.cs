@@ -9,7 +9,6 @@ using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +30,7 @@ var downloadBuilder = new CommandBuilder(new Command("download") { Handler = Com
     .AddArgument(libraryPathArgument)
     .AddOption(new Option<System.IO.DirectoryInfo>(new[] { "-o", "--output-path" }, () => new System.IO.DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
     .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
-    .AddOption(new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, false, "The time to download books after"));
+    .AddOption(new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, isDefault: false, "The time to download books after"));
 
 static DateTime? ParseArgument(ArgumentResult result)
 {
@@ -113,7 +112,7 @@ static async Task Download(
     System.Threading.CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
-    AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+    AppDomain.CurrentDomain.UnhandledException += (_, e) =>
     {
         switch (e.ExceptionObject)
         {
@@ -328,7 +327,7 @@ static async Task Download(
 
         static string GetHashedName(string fileName)
         {
-            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", fileName.GetHashCode()) + System.IO.Path.GetExtension(fileName);
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", System.StringComparer.Ordinal.GetHashCode(fileName)) + System.IO.Path.GetExtension(fileName);
         }
     }
 }

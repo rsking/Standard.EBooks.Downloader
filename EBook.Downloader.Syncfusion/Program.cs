@@ -7,7 +7,6 @@ using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -115,29 +114,29 @@ static async Task Process(
                 string? header = default;
                 foreach (var detail in detailsSection.ChildNodes)
                 {
-                    if (string.Equals(detail.Name, "h5", System.StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(detail.Name, "h5", StringComparison.OrdinalIgnoreCase))
                     {
                         header = detail.InnerText;
                         continue;
                     }
 
-                    if (string.Equals(detail.Name, "p", System.StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(detail.Name, "p", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (string.Equals(header, "isbn", System.StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(header, "isbn", StringComparison.OrdinalIgnoreCase))
                         {
-                            actualIsbn = detail.InnerText.Replace("-", string.Empty, System.StringComparison.OrdinalIgnoreCase);
+                            actualIsbn = detail.InnerText.Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase);
                         }
-                        else if (string.Equals(header, "published on", System.StringComparison.OrdinalIgnoreCase))
+                        else if (string.Equals(header, "published on", StringComparison.OrdinalIgnoreCase))
                         {
-                            var text = detail.InnerText.Replace("Published on: ", string.Empty, System.StringComparison.OrdinalIgnoreCase);
+                            var text = detail.InnerText.Replace("Published on: ", string.Empty, StringComparison.OrdinalIgnoreCase);
 
-                            if (System.DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
+                            if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
                             {
                                 publishedOn = parsed;
                             }
                             else
                             {
-                                publishedOn = System.DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
+                                publishedOn = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
                             }
                         }
 
@@ -180,7 +179,7 @@ static async Task Process(
 
         static bool IsbnHasChanged(string isbn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualIsbn)
         {
-            return actualIsbn is not null && !string.Equals(isbn, actualIsbn, System.StringComparison.Ordinal);
+            return actualIsbn is not null && !string.Equals(isbn, actualIsbn, StringComparison.Ordinal);
         }
 
         static bool UrlHasChanged(Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Uri? requestUri)
@@ -207,7 +206,7 @@ static async Task Process(
 
             // parse this out
             var readOnlineUri = new Uri(uri, onClick
-                .Replace("location.href=", string.Empty, System.StringComparison.OrdinalIgnoreCase)
+                .Replace("location.href=", string.Empty, StringComparison.OrdinalIgnoreCase)
                 .Trim('\''));
 
             var html = await client
@@ -234,8 +233,8 @@ static async Task Process(
 
             var imageUri = new Uri(uri, src);
 
-            var fileName = System.IO.Path.GetTempFileName();
-            var fileStream = System.IO.File.OpenWrite(fileName);
+            var fileName = Path.GetTempFileName();
+            var fileStream = File.OpenWrite(fileName);
             await using (fileStream.ConfigureAwait(false))
             {
                 var stream = await client

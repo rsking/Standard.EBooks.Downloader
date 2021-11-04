@@ -133,7 +133,7 @@ public class CalibreDb
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, json);
+            this.logger.LogError(ex, "{JSON}", json);
             throw;
         }
     }
@@ -752,12 +752,12 @@ public class CalibreDb
                 {
                     line =
 #if NETSTANDARD2_0
-                            line.Substring(16);
+                        line.Substring(16);
 #else
-                            line[16..];
+                        line[16..];
 #endif
 
-                        bookIds.AddRange(line
+                    bookIds.AddRange(line
                         .Split(',')
                         .Select(value => value.Trim())
                         .Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)));
@@ -779,7 +779,7 @@ public class CalibreDb
             ? this.ContentServer.ToString()
             : "\"" + this.Path + "\"";
         var fullArguments = $"{command} --with-library {path} {arguments}";
-        this.logger.LogDebug(fullArguments);
+        this.logger.LogDebug("CommandLine: {Arguments}", fullArguments);
 
         var processStartInfo = new System.Diagnostics.ProcessStartInfo(this.calibreDbPath, fullArguments)
         {
@@ -807,7 +807,7 @@ public class CalibreDb
             }
             else
             {
-                this.logger.LogInformation(0, args.Data);
+                this.logger.LogInformation(0, "{Data}", args.Data);
             }
         };
 
@@ -818,7 +818,7 @@ public class CalibreDb
                 return;
             }
 
-            this.logger.LogError(0, args.Data);
+            this.logger.LogError(0, "{Data}", args.Data);
         };
 
         process.Exited += (sender, args) =>
@@ -839,7 +839,7 @@ public class CalibreDb
             .ConfigureAwait(false);
 #else
         if (await process
-            .WaitForExitAsync(System.Threading.Timeout.Infinite)
+            .WaitForExitAsync(Timeout.Infinite)
             .ConfigureAwait(false))
         {
             if (cancellationToken.IsCancellationRequested)

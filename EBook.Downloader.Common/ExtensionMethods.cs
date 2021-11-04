@@ -44,7 +44,7 @@ public static class ExtensionMethods
             }
         }
 
-        return lastModified.HasValue && System.Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D
+        return lastModified.HasValue && Math.Abs((dateTime - lastModified.Value.DateTime).TotalSeconds) > 2D
             ? uri
             : default;
 
@@ -144,7 +144,7 @@ public static class ExtensionMethods
                         var fileSystemInfo = new FileInfo(pathName) { LastWriteTimeUtc = dateTimeOffset.Value.UtcDateTime };
                     }
                 },
-                System.Threading.CancellationToken.None,
+                CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default).ConfigureAwait(false);
 

@@ -12,5 +12,5 @@ namespace EBook.Downloader.Calibre;
 public record class Identifier(string Name, object Value)
 {
     /// <inheritdoc/>
-    public override string ToString() => System.FormattableString.Invariant($"{this.Name}:{this.Value}");
+    public override string ToString() => FormattableString.Invariant($"{this.Name}:{this.Value}");
 }

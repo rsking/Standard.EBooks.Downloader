@@ -54,7 +54,7 @@ public record class EpubInfo
     /// <summary>
     /// Gets the path.
     /// </summary>
-    public FileInfo Path { get; private init; } = new FileInfo(System.Environment.SystemDirectory);
+    public FileInfo Path { get; private init; } = new FileInfo(Environment.SystemDirectory);
 
     /// <summary>
     /// Parses EPUB information from a path.
@@ -77,7 +77,7 @@ public record class EpubInfo
         var authors = GetAuthors(document, manager);
         var tags = GetTags(document, manager);
         var identifiers = GetIdentifiers(document, manager)
-            .ToDictionary(x => x.Key, x => x.Value, System.StringComparer.Ordinal);
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         (var description, var longDescription) = parseDescription
             ? GetDescription(document, manager)
             : default;
@@ -105,7 +105,7 @@ public record class EpubInfo
                 yield break;
             }
 
-            for (var index = 1; (publisher = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']"), manager)) is not null; index++)
+            for (var index = 1; (publisher = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']"), manager)) is not null; index++)
             {
                 yield return publisher.InnerText;
             }
@@ -120,7 +120,7 @@ public record class EpubInfo
                 yield break;
             }
 
-            for (var index = 1; (author = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:creator[@id='author-{index}']"), manager)) is not null; index++)
+            for (var index = 1; (author = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:creator[@id='author-{index}']"), manager)) is not null; index++)
             {
                 yield return author.InnerText;
             }
@@ -135,7 +135,7 @@ public record class EpubInfo
                 yield break;
             }
 
-            for (var index = 1; (collection = document.SelectSingleNode(System.FormattableString.Invariant($"/x:package/x:metadata/dc:subject[@id='subject-{index}']"), manager)) is not null; index++)
+            for (var index = 1; (collection = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:subject[@id='subject-{index}']"), manager)) is not null; index++)
             {
                 yield return collection.InnerText;
             }
@@ -180,7 +180,7 @@ public record class EpubInfo
                 var name = node.InnerText;
 
                 var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is System.Xml.XmlNode collectionTypeNode && collectionTypeNode.InnerText is not null
-                    ? (EpubCollectionType)System.Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
+                    ? (EpubCollectionType)Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
                     : EpubCollectionType.None;
 
                 var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is System.Xml.XmlNode groupPositionNode && groupPositionNode.InnerText is not null

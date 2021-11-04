@@ -9,7 +9,6 @@ using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -121,7 +120,7 @@ static async Task Tags(
             return (value, default);
         }
 
-        return (value.Substring(0, index - 1), value[index..]);
+        return (value[..(index - 1)], value[index..]);
     }
 
     static string Join(string name, string? character)
@@ -158,7 +157,7 @@ static async Task Description(
             }
             else if (description?.Contains("**", StringComparison.Ordinal) == true)
             {
-                System.Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
+                Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
             }
         }
         else

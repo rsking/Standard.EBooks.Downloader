@@ -171,17 +171,17 @@ public class CalibreLibrary : IDisposable
             }
 
             var fullPath = book.GetFullPath(this.Path, info.Path.Extension);
-            if (System.IO.File.Exists(fullPath))
+            if (File.Exists(fullPath))
             {
                 // see if this has changed at all
                 if (!CheckFiles(info.Path, fullPath, this.logger))
                 {
                     // files are not the same. Copy in the new file
-                    this.logger.LogInformation("Replacing {0} as files do not match", book.Name);
+                    this.logger.LogInformation("Replacing {Name} as files do not match", book.Name);
 
                     // access the destination file first
                     var bytes = new byte[ushort.MaxValue];
-                    using (var stream = System.IO.File.OpenRead(fullPath))
+                    using (var stream = File.OpenRead(fullPath))
                     {
                         int length;
                         while ((length = await stream.ReadAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false)) == bytes.Length)
@@ -210,7 +210,7 @@ public class CalibreLibrary : IDisposable
                     {
                         coverFile = System.IO.Path.GetTempFileName();
                         using var zipStream = coverEntry.Open();
-                        using var fileStream = System.IO.File.OpenWrite(coverFile);
+                        using var fileStream = File.OpenWrite(coverFile);
                         await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
                     }
                 }
@@ -222,9 +222,9 @@ public class CalibreLibrary : IDisposable
 
                 // we need to add this
                 var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags, cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (coverFile != default && System.IO.File.Exists(coverFile))
+                if (coverFile != default && File.Exists(coverFile))
                 {
-                    System.IO.File.Delete(coverFile);
+                    File.Delete(coverFile);
                 }
 
                 return bookId == -1
@@ -270,7 +270,7 @@ public class CalibreLibrary : IDisposable
                 static byte[] GetFileHash(string fileName)
                 {
                     using var sha = System.Security.Cryptography.SHA256.Create();
-                    using var stream = System.IO.File.OpenRead(fileName);
+                    using var stream = File.OpenRead(fileName);
                     return sha.ComputeHash(stream);
                 }
             }
@@ -283,7 +283,7 @@ public class CalibreLibrary : IDisposable
             void UpdateLastWriteTime(string path, string name, EpubInfo info)
             {
                 var fullPath = System.IO.Path.Combine(this.Path, path, $"{name}{info.Path.Extension}");
-                if (System.IO.File.Exists(fullPath))
+                if (File.Exists(fullPath))
                 {
                     _ = new FileInfo(fullPath) { LastWriteTime = info.Path.LastWriteTime };
                 }
@@ -780,7 +780,7 @@ public class CalibreLibrary : IDisposable
         if (Math.Abs(difference.TotalMinutes) > maxTimeOffset || difference.TotalMinutes > 0)
         {
             // write this to the database
-            this.logger.LogInformation("Updating last modified time for {0} in the database from {1} to {2}", name, lastModified.ToUniversalTime(), fileLastModified);
+            this.logger.LogInformation("Updating last modified time for {Name} in the database from {Previous} to {New}", name, lastModified.ToUniversalTime(), fileLastModified);
             this.updateLastModifiedCommand.Parameters[":lastModified"].Value = fileLastModified.ToString("yyyy-MM-dd HH:mm:ss.ffffffzzz", System.Globalization.CultureInfo.InvariantCulture);
             this.updateLastModifiedCommand.Parameters[":id"].Value = id;
 
@@ -812,20 +812,20 @@ public class CalibreLibrary : IDisposable
     {
         public static readonly IEnumerable<string> LowerCase = new[]
         {
-                "a",
-                "for",
-                "of",
-                "on",
-                "and",
-                "in",
-                "the",
-                "it",
-                "it",
-                "it's",
-                "as",
-                "to",
-                "ca.",
-                "into",
-            };
+            "a",
+            "for",
+            "of",
+            "on",
+            "and",
+            "in",
+            "the",
+            "it",
+            "it",
+            "it's",
+            "as",
+            "to",
+            "ca.",
+            "into",
+        };
     }
 }
