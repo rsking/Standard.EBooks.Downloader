@@ -7,7 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.5.0" />
-    <PackageReference Include="IsExternalInit" Version="1.0.1">
+    <PackageReference Include="IsExternalInit" Version="1.0.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -15,7 +15,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetVersion)" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="$(DotNetVersion)" />
     <PackageReference Include="System.Collections.Immutable" Version="$(DotNetVersion)" />
-    <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00014" />
+    <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00015" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,7 +10,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="$(DotNetPatchVersion)" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(DotNetVersion)" />
     <PackageReference Include="System.CommandLine.Hosting" Version="$(SystemCommandLineHostingVersion)" />
-    <PackageReference Include="System.Linq.Async" Version="$(DotNetVersion)" />
+    <PackageReference Include="System.Linq.Async" Version="5.1.0" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="$(DotNetVersion)" />
   </ItemGroup>
 
