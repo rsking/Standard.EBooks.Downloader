@@ -16,17 +16,17 @@ internal static class ExtensionMethods
     /// </summary>
     /// <param name="uri">The URL.</param>
     /// <returns>The file extension.</returns>
-    public static string GetExtension(this System.Uri uri) => System.IO.Path.GetExtension(GetFileName(uri));
+    public static string GetExtension(this Uri uri) => Path.GetExtension(GetFileName(uri));
 
     /// <summary>
     /// Gets the file name for the specified URL.
     /// </summary>
     /// <param name="uri">The URL.</param>
     /// <returns>The file name.</returns>
-    public static string GetFileName(this System.Uri uri) => uri.Segments[^1] switch
+    public static string GetFileName(this Uri uri) => uri.Segments[^1] switch
     {
-        string value when value.EndsWith(".kepub.epub", System.StringComparison.OrdinalIgnoreCase) => System.IO.Path.GetFileNameWithoutExtension(value),
-        string value when value.EndsWith(".epub3", System.StringComparison.OrdinalIgnoreCase) => System.IO.Path.ChangeExtension(value, ".epub"),
+        string value when value.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase) => Path.GetFileNameWithoutExtension(value),
+        string value when value.EndsWith(".epub3", StringComparison.OrdinalIgnoreCase) => Path.ChangeExtension(value, ".epub"),
         string value => value,
     };
 
@@ -46,6 +46,6 @@ internal static class ExtensionMethods
             return option;
         }
 
-        throw new System.ArgumentException("option.Argument must be an Argument", nameof(option));
+        throw new ArgumentException("option.Argument must be an Argument", nameof(option));
     }
 }
