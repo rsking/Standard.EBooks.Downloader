@@ -62,6 +62,7 @@ static async Task Process(
         var title = element.GetProperty("title").GetString();
         Uri? uri = default;
         string? isbn = default;
+        string? gitHub = default;
         if (element.TryGetProperty("identifiers", out var identifiersElement))
         {
             if (identifiersElement.TryGetProperty("uri", out var uriElement) && uriElement.GetString() is string uriString)
@@ -73,13 +74,18 @@ static async Task Process(
             {
                 isbn = isbnString;
             }
+
+            if (identifiersElement.TryGetProperty("github", out var gitHubElement) && gitHubElement.GetString() is string gitHubString)
+            {
+                gitHub = gitHubString;
+            }
         }
 
-        return (Id: id, Title: title, Uri: uri, Isbn: isbn);
+        return (Id: id, Title: title, Uri: uri, Isbn: isbn, GitHub: gitHub);
     }).ToArray();
 
     var clientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
-    foreach (var (id, title, uri, isbn) in books)
+    foreach (var (id, title, uri, isbn, gitHub) in books)
     {
         if (uri is null)
         {
@@ -146,10 +152,26 @@ static async Task Process(
             }
         }
 
+        string? actualGithub = default;
+        var sourceCodeSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("source-code"));
+        if (sourceCodeSections is not null)
+        {
+            foreach (var sourceCodeSection in sourceCodeSections.Where(node => node.HasChildNodes))
+            {
+                var anchor = sourceCodeSection.ChildNodes.Single(n => string.Equals(n.Name,  "a", StringComparison.Ordinal));
+                var href = anchor.GetAttributeValue("href", string.Empty);
+                if (!string.IsNullOrEmpty(href))
+                {
+                    actualGithub = href.Replace("https://github.com/", string.Empty, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        }
+
         var fields = new List<(StandardField Field, object? Value)>();
         string? imagePath = default;
         if (IsbnHasChanged(isbn, actualIsbn)
-            || UrlHasChanged(uri, requestUri))
+            || UrlHasChanged(uri, requestUri)
+            || GitHubHasChanged(gitHub, actualGithub))
         {
             if (!cover)
             {
@@ -158,6 +180,10 @@ static async Task Process(
 
             fields.Add((StandardField.Identifiers, new Identifier("isbn", actualIsbn ?? isbn)));
             fields.Add((StandardField.Identifiers, new Identifier("uri", requestUri ?? uri)));
+            if (actualGithub is not null)
+            {
+                fields.Add((StandardField.Identifiers, new Identifier("github", actualGithub ?? gitHub)));
+            }
         }
 
         if (cover)
@@ -185,6 +211,11 @@ static async Task Process(
         static bool UrlHasChanged(Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Uri? requestUri)
         {
             return requestUri is not null && uri != requestUri;
+        }
+
+        static bool GitHubHasChanged(string github, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualGitHub)
+        {
+            return !string.Equals(github, actualGitHub, StringComparison.Ordinal);
         }
 
         static async ValueTask<string?> GetImageAsync(HttpClient client, Uri uri, HtmlAgilityPack.HtmlDocument document, CancellationToken cancellationToken)
