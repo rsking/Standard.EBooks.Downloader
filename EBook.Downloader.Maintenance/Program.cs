@@ -7,25 +7,37 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
-using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var calibreLibraryPathArgument = new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+#pragma warning disable MA0047, SA1516
 
-var tagsCommandBuilder = new CommandBuilder(new Command(nameof(Tags).ToLowerInvariant()) { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Tags) })
-    .AddArgument(calibreLibraryPathArgument);
+var tagsCommand = new Command(nameof(Tags).ToLowerInvariant())
+{
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+};
 
-var descriptionCommandBuilder = new CommandBuilder(new Command(nameof(Description).ToLowerInvariant()) { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool>(Description) })
-    .AddArgument(calibreLibraryPathArgument);
+tagsCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool>(Tags, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
 
-var builder = new CommandLineBuilder(new RootCommand("Calibre EBook Maintenence"))
-    .AddCommand(tagsCommandBuilder.Command)
-    .AddCommand(descriptionCommandBuilder.Command)
-    .AddGlobalOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
+var descriptionCommand = new Command(nameof(Description).ToLowerInvariant())
+{
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+};
+
+descriptionCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool>(Description, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
+
+var rootCommand = new RootCommand("Calibre EBook Maintenence")
+{
+    tagsCommand,
+    descriptionCommand,
+};
+
+rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
+
+var builder = new CommandLineBuilder(rootCommand)
     .UseDefaults()
     .UseHost(Host.CreateDefaultBuilder, builder => builder.ConfigureServices(services => services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true)));
 
@@ -176,3 +188,5 @@ static async Task Description(
         }
     }
 }
+
+#pragma warning restore MA0047, SA1516

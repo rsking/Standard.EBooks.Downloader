@@ -7,7 +7,6 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
-using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
@@ -15,6 +14,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
+
+#pragma warning disable MA0047, SA1516
 
 const int SentinelRetryCount = 30;
 
@@ -24,46 +25,41 @@ const int MaxTimeOffset = 180;
 
 const string AtomUrl = "https://standardebooks.org/opds/all";
 
-var libraryPathArgument = new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+var maxTimeOffsetOption = new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset");
+var forcedSeriesOption = new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series");
 
-var downloadBuilder = new CommandBuilder(new Command("download") { Handler = CommandHandler.Create(Download) })
-    .AddArgument(libraryPathArgument)
-    .AddOption(new Option<DirectoryInfo>(new[] { "-o", "--output-path" }, () => new DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH" }.WithArity(ArgumentArity.ExactlyOne).ExistingOnly())
-    .AddOption(new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync"))
-    .AddOption(new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, isDefault: false, "The time to download books after"));
+var outputPathOption = new Option<DirectoryInfo>(new[] { "-o", "--output-path" }, () => new DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+var resyncOption = new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync");
+var afterOption = new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, isDefault: false, "The time to download books after");
 
-static DateTime? ParseArgument(ArgumentResult result)
+var downloadCommand = new Command("download")
 {
-    var dateString = result.Tokens[0];
-    return Parse(dateString.Value);
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+    outputPathOption,
+    resyncOption,
+    afterOption,
+};
 
-    static DateTime? Parse(string? dateString)
-    {
-        if (string.IsNullOrEmpty(dateString))
-        {
-            return null;
-        }
+downloadCommand.SetHandler<IHost, DirectoryInfo, DirectoryInfo, bool, bool, DateTime?, int, FileInfo?, CancellationToken>(Download, EBook.Downloader.CommandLine.LibraryPathArgument, outputPathOption, EBook.Downloader.CommandLine.UseContentServerOption, resyncOption, afterOption, maxTimeOffsetOption, forcedSeriesOption);
 
-        var parser = new ChronicNetCore.Parser();
-        var parsedSpan = parser.Parse(dateString);
-        if (parsedSpan is null)
-        {
-            return default;
-        }
+var metadataCommand = new Command("metadata")
+{
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+};
 
-        return parsedSpan.Start;
-    }
-}
+metadataCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Metadata, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, maxTimeOffsetOption, forcedSeriesOption);
 
-var updateBuilder = new CommandBuilder(new Command("metadata") { Handler = CommandHandler.Create<IHost, System.IO.DirectoryInfo, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Metadata) })
-    .AddArgument(libraryPathArgument);
+var rootCommand = new RootCommand("Standard EBook Downloader")
+{
+    downloadCommand,
+    metadataCommand,
+};
 
-var builder = new CommandLineBuilder(new RootCommand("Standard EBook Downloader"))
-    .AddCommand(downloadBuilder.Command)
-    .AddCommand(updateBuilder.Command)
-    .AddGlobalOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
-    .AddGlobalOption(new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset"))
-    .AddGlobalOption(new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series"))
+rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
+rootCommand.AddGlobalOption(maxTimeOffsetOption);
+rootCommand.AddGlobalOption(forcedSeriesOption);
+
+var builder = new CommandLineBuilder(rootCommand)
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
@@ -99,6 +95,29 @@ return await builder
     .Build()
     .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
+
+static DateTime? ParseArgument(ArgumentResult result)
+{
+    var dateString = result.Tokens[0];
+    return Parse(dateString.Value);
+
+    static DateTime? Parse(string? dateString)
+    {
+        if (string.IsNullOrEmpty(dateString))
+        {
+            return null;
+        }
+
+        var parser = new ChronicNetCore.Parser();
+        var parsedSpan = parser.Parse(dateString);
+        if (parsedSpan is null)
+        {
+            return default;
+        }
+
+        return parsedSpan.Start;
+    }
+}
 
 static async Task Download(
     IHost host,
@@ -356,3 +375,5 @@ static async Task Metadata(
         }
     }
 }
+
+#pragma warning restore MA0047, SA1516

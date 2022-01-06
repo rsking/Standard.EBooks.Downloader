@@ -13,10 +13,20 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-var builder = new CommandLineBuilder(new RootCommand("Syncfusion EBook Updater") { Handler = CommandHandler.Create<IHost, DirectoryInfo, bool, bool, CancellationToken>(Process) })
-    .AddArgument(new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.ExistingOnly())
-    .AddOption(new Option<bool>(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not"))
-    .AddOption(new Option<bool>(new[] { "-c", "--cover" }, "Download covers"))
+#pragma warning disable MA0047, SA1516
+
+var coverOption = new Option<bool>(new[] { "-c", "--cover" }, "Download covers");
+
+var rootCommand = new RootCommand("Syncfusion EBook Updater")
+{
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+    EBook.Downloader.CommandLine.UseContentServerOption,
+    coverOption,
+};
+
+rootCommand.SetHandler<IHost, DirectoryInfo, bool, bool, CancellationToken>(Process, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, coverOption);
+
+var builder = new CommandLineBuilder(rootCommand)
     .UseDefaults()
     .UseHost(
         Host.CreateDefaultBuilder,
@@ -282,3 +292,5 @@ static async Task Process(
         }
     }
 }
+
+#pragma warning restore MA0047, SA1516

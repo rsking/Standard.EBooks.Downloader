@@ -29,23 +29,4 @@ internal static class ExtensionMethods
         string value when value.EndsWith(".epub3", StringComparison.OrdinalIgnoreCase) => Path.ChangeExtension(value, ".epub"),
         string value => value,
     };
-
-    /// <summary>
-    /// Sets the arity of the option.
-    /// </summary>
-    /// <typeparam name="T">The type of option.</typeparam>
-    /// <param name="option">The option.</param>
-    /// <param name="arity">The arity.</param>
-    /// <returns>The option for chaining.</returns>
-    public static T WithArity<T>(this T option, System.CommandLine.IArgumentArity arity)
-        where T : System.CommandLine.IOption
-    {
-        if (option.Argument is System.CommandLine.Argument argument)
-        {
-            argument.Arity = arity;
-            return option;
-        }
-
-        throw new ArgumentException("option.Argument must be an Argument", nameof(option));
-    }
 }

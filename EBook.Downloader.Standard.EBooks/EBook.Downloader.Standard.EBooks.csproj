@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\CommandLine.cs" Link="CommandLine.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ChronicNetCore" Version="1.0.0" />
     <PackageReference Include="HtmlAgilityPack" Version="$(HtmlAgilityPackVersion)" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="$(DotNetVersion)" />

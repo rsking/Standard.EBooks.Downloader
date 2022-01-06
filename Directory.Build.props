@@ -17,7 +17,7 @@
     <DotNetVersion>6.0.0</DotNetVersion>
     <DotNetPatchVersion>6.0.1</DotNetPatchVersion>
     <HtmlAgilityPackVersion>1.11.39</HtmlAgilityPackVersion>
-    <SystemCommandLineHostingVersion>0.3.0-alpha.21216.1</SystemCommandLineHostingVersion>
+    <SystemCommandLineHostingVersion>0.4.0-alpha.21617.1</SystemCommandLineHostingVersion>
     <SerilogVersion>4.1.0</SerilogVersion>
   </PropertyGroup>
 
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.680">
+    <PackageReference Include="Meziantou.Analyzer" Version="1.0.687">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
