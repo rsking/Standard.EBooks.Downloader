@@ -16,7 +16,7 @@
   <PropertyGroup Label="Versions">
     <DotNetVersion>6.0.0</DotNetVersion>
     <DotNetPatchVersion>6.0.1</DotNetPatchVersion>
-    <HtmlAgilityPackVersion>1.11.39</HtmlAgilityPackVersion>
+    <HtmlAgilityPackVersion>1.11.40</HtmlAgilityPackVersion>
     <SystemCommandLineHostingVersion>0.4.0-alpha.21617.1</SystemCommandLineHostingVersion>
     <SerilogVersion>4.1.0</SerilogVersion>
   </PropertyGroup>
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.687">
+    <PackageReference Include="Meziantou.Analyzer" Version="1.0.688">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -40,5 +40,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+
+  <PropertyGroup Condition=" '$(MSBuildRuntimeType)' == 'Core' ">
+    <NoWarn>$(NoWarn);SA1642;SA1643</NoWarn>
+  </PropertyGroup>
 
 </Project>
