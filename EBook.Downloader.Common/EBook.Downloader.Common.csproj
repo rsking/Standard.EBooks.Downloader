@@ -5,14 +5,19 @@
     <NoWarn>$(NoWarn);CA1303</NoWarn>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DotNetVersion>2.1.0</DotNetVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.5.0" />
     <PackageReference Include="IsExternalInit" Version="1.0.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="2.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(DotNetVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetVersion)" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="$(DotNetVersion)" />
     <PackageReference Include="System.Collections.Immutable" Version="1.2.0" />
     <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00015" />
   </ItemGroup>

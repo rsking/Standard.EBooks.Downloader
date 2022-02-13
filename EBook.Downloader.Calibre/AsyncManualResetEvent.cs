@@ -20,7 +20,7 @@ internal class AsyncManualResetEvent
     /// <summary>
     /// True to run synchronous continuations on the thread which invoked Set. False to run them in the threadpool.
     /// </summary>
-    private readonly bool runSynchronousContinuationsOnSetThread = true;
+    private readonly bool runSynchronousContinuationsOnSetThread;
 
     /// <summary>
     /// The current task completion source.
@@ -104,7 +104,7 @@ internal class AsyncManualResetEvent
         Interlocked.CompareExchange(ref this.completionSource, new TaskCompletionSource<bool>(), currentCompletionSource);
     }
 
-    private async Task<bool> AwaitCompletion(int timeoutMS, CancellationToken token)
+    private Task<bool> AwaitCompletion(int timeoutMS, CancellationToken token)
     {
         // Validate arguments.
         if (timeoutMS < -1 || timeoutMS > int.MaxValue)
@@ -112,43 +112,48 @@ internal class AsyncManualResetEvent
             throw new ArgumentException("The timeout must be either -1ms (indefinitely) or a positive ms value <= int.MaxValue", nameof(timeoutMS));
         }
 
-        CancellationTokenSource? timeoutToken = default;
+        return AwaitCompletionCore();
 
-        // If the token cannot be cancelled, then we dont need to create any sort of linked token source.
-        if (!token.CanBeCanceled)
+        async Task<bool> AwaitCompletionCore()
         {
-            // If the wait is indefinite, then we don't need to create a second task at all to wait on, just wait for set.
-            if (timeoutMS == -1)
+            CancellationTokenSource? timeoutToken = default;
+
+            // If the token cannot be cancelled, then we dont need to create any sort of linked token source.
+            if (!token.CanBeCanceled)
             {
-                return await this.completionSource.Task.ConfigureAwait(false);
+                // If the wait is indefinite, then we don't need to create a second task at all to wait on, just wait for set.
+                if (timeoutMS == -1)
+                {
+                    return await this.completionSource.Task.ConfigureAwait(false);
+                }
+
+                timeoutToken = new CancellationTokenSource();
+            }
+            else
+            {
+                // A token source which will get canceled either when we cancel it, or when the linked token source is canceled.
+                timeoutToken = CancellationTokenSource.CreateLinkedTokenSource(token);
             }
 
-            timeoutToken = new CancellationTokenSource();
-        }
-        else
-        {
-            // A token source which will get canceled either when we cancel it, or when the linked token source is canceled.
-            timeoutToken = CancellationTokenSource.CreateLinkedTokenSource(token);
-        }
-
-        using (timeoutToken)
-        {
-            // Create a task to account for our timeout. The continuation just eats the task cancelled exception, but makes sure to observe it.
-            var delayTask = Task.Delay(timeoutMS, timeoutToken.Token).ContinueWith((result) => { var e = result.Exception; }, TaskContinuationOptions.ExecuteSynchronously);
-
-            var resultingTask = await Task.WhenAny(this.completionSource.Task, delayTask).ConfigureAwait(false);
-
-            // The actual task finished, not the timeout, so we can cancel our cancellation token and return true.
-            if (resultingTask != delayTask)
+            using (timeoutToken)
             {
-                // Cancel the timeout token to cancel the delay if it is still going.
-                timeoutToken.Cancel();
-                return true;
-            }
+                // Create a task to account for our timeout. The continuation just eats the task cancelled exception, but makes sure to observe it.
+                var delayTask = Task.Delay(timeoutMS, timeoutToken.Token).ContinueWith((result) => _ = result.Exception, TaskContinuationOptions.ExecuteSynchronously);
 
-            // Otherwise, the delay task finished. So throw if it finished because it was canceled.
-            token.ThrowIfCancellationRequested();
-            return false;
+                var resultingTask = await Task.WhenAny(this.completionSource.Task, delayTask).ConfigureAwait(false);
+
+                // The actual task finished, not the timeout, so we can cancel our cancellation token and return true.
+                if (resultingTask != delayTask)
+                {
+                    // Cancel the timeout token to cancel the delay if it is still going.
+                    timeoutToken.Cancel();
+                    return true;
+                }
+
+                // Otherwise, the delay task finished. So throw if it finished because it was canceled.
+                token.ThrowIfCancellationRequested();
+                return false;
+            }
         }
     }
 }

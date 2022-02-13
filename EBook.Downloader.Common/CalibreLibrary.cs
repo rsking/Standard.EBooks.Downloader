@@ -183,9 +183,9 @@ public class CalibreLibrary : IDisposable
                     var bytes = new byte[ushort.MaxValue];
                     using (var stream = File.OpenRead(fullPath))
                     {
-                        int length;
-                        while ((length = await stream.ReadAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false)) == bytes.Length)
+                        while (await stream.ReadAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false) == bytes.Length)
                         {
+                            // just loop through
                         }
                     }
 
@@ -208,7 +208,7 @@ public class CalibreLibrary : IDisposable
                     var coverEntry = zipFile.Entries.FirstOrDefault(entry => string.Equals(entry.Name, "cover.svg", StringComparison.Ordinal));
                     if (coverEntry is not null)
                     {
-                        coverFile = System.IO.Path.GetTempFileName();
+                        coverFile = System.IO.Path.GetRandomFileName();
                         using var zipStream = coverEntry.Open();
                         using var fileStream = File.OpenWrite(coverFile);
                         await zipStream.CopyToAsync(fileStream).ConfigureAwait(false);
@@ -329,13 +329,12 @@ public class CalibreLibrary : IDisposable
                 .Concat(this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex))
                 .Concat(this.UpdateSets(sets, currentSets))
                 .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags));
-            if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false))
-            {
+            if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false)
+
                 // refresh the book with the last data
-                if (await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
-                {
-                    book = processed;
-                }
+                && await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
+            {
+                book = processed;
             }
 
             await this.UpdateLastModifiedAsync(book, epub.Path.LastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
@@ -350,21 +349,26 @@ public class CalibreLibrary : IDisposable
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task associated with this function.</returns>
-    public async Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, CancellationToken cancellationToken = default)
+    public Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (book is null)
         {
             throw new ArgumentNullException(nameof(book));
         }
 
-        var bookLastModified = await this.GetDateTimeFromDatabaseAsync(book.Id, cancellationToken).ConfigureAwait(false);
-        await this.UpdateLastModifiedAsync(
-            book.Id,
-            book.Name,
-            lastModified,
-            bookLastModified,
-            maxTimeOffset,
-            cancellationToken).ConfigureAwait(false);
+        return UpdateLastModifiedAsyncCore();
+
+        async Task UpdateLastModifiedAsyncCore()
+        {
+            var bookLastModified = await this.GetDateTimeFromDatabaseAsync(book.Id, cancellationToken).ConfigureAwait(false);
+            await this.UpdateLastModifiedAsync(
+                book.Id,
+                book.Name,
+                lastModified,
+                bookLastModified,
+                maxTimeOffset,
+                cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -396,8 +400,6 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBooks(document, predicate).SingleOrDefault();
-
     private static IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
     {
         if (document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -413,6 +415,8 @@ public class CalibreLibrary : IDisposable
     }
 
     private static CalibreBook GetCalibreBook(System.Text.Json.JsonElement json) => new(json);
+
+    private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBooks(document, predicate).SingleOrDefault();
 
     private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier)
     {
@@ -441,7 +445,7 @@ public class CalibreLibrary : IDisposable
 
     private static (string? Name, float Index) GetCurrentSeries(System.Text.Json.JsonElement json)
     {
-        return (GetSeries(json), (float)json.GetProperty("series_index").GetSingle());
+        return (GetSeries(json), json.GetProperty("series_index").GetSingle());
 
         static string? GetSeries(System.Text.Json.JsonElement json)
         {
@@ -806,7 +810,7 @@ public class CalibreLibrary : IDisposable
 
     private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
 
-    private record class FieldToUpdate(string Field, object? Value);
+    private sealed record class FieldToUpdate(string Field, object? Value);
 
     private static class Words
     {

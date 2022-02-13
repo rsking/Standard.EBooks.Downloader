@@ -214,7 +214,7 @@ public class CalibreDb
         var end = false;
         var resetEvent = new AsyncManualResetEvent();
 
-        var task = this.ExecuteCalibreDbAsync(
+        _ = this.ExecuteCalibreDbAsync(
             "search",
             searchExpression,
             data =>
@@ -406,7 +406,7 @@ public class CalibreDb
         var end = false;
         var resetEvent = new AsyncManualResetEvent();
 
-        var execureCalibreDbTask = this.ExecuteCalibreDbAsync(
+        _ = this.ExecuteCalibreDbAsync(
             "list_categories",
             command,
             data =>

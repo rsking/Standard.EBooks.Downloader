@@ -67,10 +67,7 @@ public record class EpubInfo
         var document = new System.Xml.XmlDocument();
         document.LoadXml(GetContents());
 
-        var manager = new System.Xml.XmlNamespaceManager(document.NameTable);
-        manager.AddNamespace(string.Empty, "http://www.idpf.org/2007/opf");
-        manager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
-        manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
+        var manager = CreateNamespaceManager(document);
 
         var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
         var publishers = GetPublishers(document, manager);
@@ -95,6 +92,16 @@ public record class EpubInfo
             Collections = collections,
             Path = new FileInfo(path),
         };
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S1075:URIs should not be hardcoded", Justification = "These are XML namespaces")]
+        static System.Xml.XmlNamespaceManager CreateNamespaceManager(System.Xml.XmlDocument document)
+        {
+            var manager = new System.Xml.XmlNamespaceManager(document.NameTable);
+            manager.AddNamespace(string.Empty, "http://www.idpf.org/2007/opf");
+            manager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
+            manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
+            return manager;
+        }
 
         static IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {

@@ -5,15 +5,12 @@
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
-using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
-
-#pragma warning disable MA0047, SA1516
 
 var coverOption = new Option<bool>(new[] { "-c", "--cover" }, "Download covers");
 
@@ -122,7 +119,6 @@ static async Task Process(
 
         var detailsSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("details-section"));
         string? actualIsbn = default;
-        DateTime? publishedOn = default;
         if (detailsSections is not null)
         {
             foreach (var detailsSection in detailsSections.Where(node => node.HasChildNodes))
@@ -141,19 +137,6 @@ static async Task Process(
                         if (string.Equals(header, "isbn", StringComparison.OrdinalIgnoreCase))
                         {
                             actualIsbn = detail.InnerText.Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase);
-                        }
-                        else if (string.Equals(header, "published on", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var text = detail.InnerText.Replace("Published on: ", string.Empty, StringComparison.OrdinalIgnoreCase);
-
-                            if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
-                            {
-                                publishedOn = parsed;
-                            }
-                            else
-                            {
-                                publishedOn = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal);
-                            }
                         }
 
                         header = default;
@@ -274,7 +257,7 @@ static async Task Process(
 
             var imageUri = new Uri(uri, src);
 
-            var fileName = Path.GetTempFileName();
+            var fileName = Path.GetRandomFileName();
             var fileStream = File.OpenWrite(fileName);
             await using (fileStream.ConfigureAwait(false))
             {
@@ -292,5 +275,3 @@ static async Task Process(
         }
     }
 }
-
-#pragma warning restore MA0047, SA1516

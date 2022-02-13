@@ -141,7 +141,7 @@ public static class ExtensionMethods
                     var dateTimeOffset = content.Headers.LastModified;
                     if (dateTimeOffset.HasValue)
                     {
-                        var fileSystemInfo = new FileInfo(pathName) { LastWriteTimeUtc = dateTimeOffset.Value.UtcDateTime };
+                        File.SetLastWriteTimeUtc(pathName, dateTimeOffset.Value.UtcDateTime);
                     }
                 },
                 CancellationToken.None,

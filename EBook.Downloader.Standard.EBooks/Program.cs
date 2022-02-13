@@ -295,6 +295,7 @@ static async Task Download(
                 }
                 catch (IOException) when (i != SentinelRetryCount)
                 {
+                    // this is below our retry count
                 }
 
                 System.Threading.Thread.Sleep(SentinelRetryWait);
