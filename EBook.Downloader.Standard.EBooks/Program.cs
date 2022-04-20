@@ -10,9 +10,12 @@ using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
+using Microsoft.Extensions.Caching;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NeoSmart.Caching.Sqlite;
 using Serilog;
 
 #pragma warning disable MA0047, SA1516
@@ -78,6 +81,8 @@ var builder = new CommandLineBuilder(rootCommand)
             configureHost
                 .ConfigureServices((_, services) =>
                 {
+                    services
+                        .AddSqliteCache(options => options.CachePath = "C:\\Temp\\http.cache.sqlite");
                     services
                         .AddHttpClient(string.Empty)
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
@@ -147,12 +152,6 @@ static async Task Download(
         }
     };
 
-    var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
-    using (var xml = System.Xml.XmlReader.Create(AtomUrl))
-    {
-        atom.ReadFrom(xml);
-    }
-
     var sentinelPath = Path.Combine(calibreLibraryPath.FullName, ".sentinel");
 
     if (!File.Exists(sentinelPath))
@@ -182,6 +181,7 @@ static async Task Download(
         : Array.Empty<string>();
 
     var atomUri = new Uri(AtomUrl);
+    var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri).ConfigureAwait(false);
     using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
         .Where(item => item.LastUpdatedTime > sentinelDateTime)
@@ -322,6 +322,28 @@ static async Task Download(
     Uri AbsoluteUri(System.ServiceModel.Syndication.SyndicationLink link)
     {
         return link.Uri.IsAbsoluteUri ? link.Uri : new Uri(atomUri, link.Uri.OriginalString);
+    }
+
+    static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri)
+    {
+        var bytes = await cache.GetAsync("atom");
+        if (bytes is null)
+        {
+            var client = httpClientFactory.CreateClient();
+            bytes = await client.GetByteArrayAsync(uri);
+            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) });
+        }
+
+        var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
+        using (var stream = new MemoryStream(bytes))
+        {
+            using (var xml = System.Xml.XmlReader.Create(stream))
+            {
+                atom.ReadFrom(xml);
+            }
+        }
+
+        return atom;
     }
 
     static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
