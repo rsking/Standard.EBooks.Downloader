@@ -326,21 +326,19 @@ static async Task Download(
 
     static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri)
     {
-        var bytes = await cache.GetAsync("atom");
+        var bytes = await cache.GetAsync("atom").ConfigureAwait(false);
         if (bytes is null)
         {
             var client = httpClientFactory.CreateClient();
-            bytes = await client.GetByteArrayAsync(uri);
-            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) });
+            bytes = await client.GetByteArrayAsync(uri).ConfigureAwait(false);
+            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) }).ConfigureAwait(false);
         }
 
         var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
         using (var stream = new MemoryStream(bytes))
         {
-            using (var xml = System.Xml.XmlReader.Create(stream))
-            {
-                atom.ReadFrom(xml);
-            }
+            using var xml = System.Xml.XmlReader.Create(stream);
+            atom.ReadFrom(xml);
         }
 
         return atom;

@@ -13,8 +13,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-#pragma warning disable MA0047, SA1516
-
 var tagsCommand = new Command(nameof(Tags).ToLowerInvariant())
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
@@ -188,5 +186,3 @@ static async Task Description(
         }
     }
 }
-
-#pragma warning restore MA0047, SA1516

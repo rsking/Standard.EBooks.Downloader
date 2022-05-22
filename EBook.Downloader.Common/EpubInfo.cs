@@ -54,7 +54,7 @@ public record class EpubInfo
     /// <summary>
     /// Gets the path.
     /// </summary>
-    public FileInfo Path { get; private init; } = new FileInfo(Environment.SystemDirectory);
+    public FileInfo Path { get; private init; } = new(Environment.SystemDirectory);
 
     /// <summary>
     /// Parses EPUB information from a path.
