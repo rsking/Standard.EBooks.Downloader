@@ -6,6 +6,7 @@ using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
+using AngleSharp;
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -51,13 +52,14 @@ return await builder
 static async Task Process(
     IHost host,
     DirectoryInfo calibreLibraryPath,
-    bool cover = false,
     bool useContentServer = false,
+    bool cover = false,
     CancellationToken cancellationToken = default)
 {
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer, logger);
-    var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers" }, searchPattern: "series:\"=Succinctly\"", cancellationToken: cancellationToken).ConfigureAwait(false);
+    var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers", "comments" }, searchPattern: "series:\"=Succinctly\"", cancellationToken: cancellationToken).ConfigureAwait(false);
+
     if (list is null)
     {
         return;
@@ -88,11 +90,17 @@ static async Task Process(
             }
         }
 
-        return (Id: id, Title: title, Uri: uri, Isbn: isbn, GitHub: gitHub);
+        string? description = default;
+        if (element.TryGetProperty("comments", out var commentsElement))
+        {
+            description = commentsElement.GetString();
+        }
+
+        return (Id: id, Title: title, Uri: uri, Isbn: isbn, GitHub: gitHub, Description: description);
     }).ToArray();
 
     var clientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
-    foreach (var (id, title, uri, isbn, gitHub) in books)
+    foreach (var (id, title, uri, isbn, gitHub, description) in books)
     {
         if (uri is null)
         {
@@ -116,6 +124,45 @@ static async Task Process(
         var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var document = new HtmlAgilityPack.HtmlDocument();
         document.LoadHtml(html);
+
+        var tabSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("tab-section"));
+        string? actualDescription = default;
+        if (tabSections is not null)
+        {
+            string? header = default;
+            foreach (var tabSection in tabSections.SelectMany(tabSection => tabSection.Descendants("div")))
+            {
+                if (tabSection.HasClass("tab__title"))
+                {
+                    header = tabSection.InnerText;
+                    continue;
+                }
+
+                if (tabSection.HasClass("tab__content"))
+                {
+                    if (header?.Contains("overview", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        var div = document.CreateElement("div");
+                        div.InnerHtml = tabSection.InnerHtml;
+
+                        actualDescription = SanitiseHtml(div.OuterHtml);
+                    }
+
+                    header = default;
+                }
+
+                static string? SanitiseHtml(string? html)
+                {
+                    if (html is null)
+                    {
+                        return null;
+                    }
+
+                    var parser = new AngleSharp.Html.Parser.HtmlParser();
+                    return parser.ParseDocument(html).Body?.FirstChild?.Minify();
+                }
+            }
+        }
 
         var detailsSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("details-section"));
         string? actualIsbn = default;
@@ -163,6 +210,7 @@ static async Task Process(
         var fields = new List<(StandardField Field, object? Value)>();
         string? imagePath = default;
         if (IsbnHasChanged(isbn, actualIsbn)
+            || DescriptionHasChanged(description, actualDescription)
             || UrlHasChanged(uri, requestUri)
             || GitHubHasChanged(gitHub, actualGithub))
         {
@@ -173,6 +221,7 @@ static async Task Process(
 
             fields.Add((StandardField.Identifiers, new Identifier("isbn", actualIsbn ?? isbn)));
             fields.Add((StandardField.Identifiers, new Identifier("uri", requestUri ?? uri)));
+            fields.Add((StandardField.Comments, actualDescription ?? description));
             if (actualGithub is not null)
             {
                 fields.Add((StandardField.Identifiers, new Identifier("github", actualGithub ?? gitHub)));
@@ -199,6 +248,11 @@ static async Task Process(
         static bool IsbnHasChanged(string isbn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualIsbn)
         {
             return actualIsbn is not null && !string.Equals(isbn, actualIsbn, StringComparison.Ordinal);
+        }
+
+        static bool DescriptionHasChanged(string description, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualDescription)
+        {
+            return actualDescription is not null && !string.Equals(description, actualDescription, StringComparison.Ordinal);
         }
 
         static bool UrlHasChanged(Uri uri, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] Uri? requestUri)
