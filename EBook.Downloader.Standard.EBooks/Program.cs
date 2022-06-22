@@ -10,15 +10,12 @@ using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
-using Microsoft.Extensions.Caching;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NeoSmart.Caching.Sqlite;
 using Serilog;
-
-#pragma warning disable MA0047, SA1516
 
 const int SentinelRetryCount = 30;
 
@@ -43,14 +40,33 @@ var downloadCommand = new Command("download")
     afterOption,
 };
 
-downloadCommand.SetHandler<IHost, DirectoryInfo, DirectoryInfo, bool, bool, DateTime?, int, FileInfo?, CancellationToken>(Download, EBook.Downloader.CommandLine.LibraryPathArgument, outputPathOption, EBook.Downloader.CommandLine.UseContentServerOption, resyncOption, afterOption, maxTimeOffsetOption, forcedSeriesOption);
+downloadCommand.SetHandler(context =>
+{
+    var host = context.BindingContext.GetRequiredService<IHost>();
+    var libraryPath = context.ParseResult.GetValueForArgument(EBook.Downloader.CommandLine.LibraryPathArgument);
+    var outputPath = context.ParseResult.GetValueForOption(outputPathOption)!;
+    var useContentServer = context.ParseResult.GetValueForOption(EBook.Downloader.CommandLine.UseContentServerOption);
+    var resync = context.ParseResult.GetValueForOption(resyncOption);
+    var after = context.ParseResult.GetValueForOption(afterOption);
+    var maxTimeOffset = context.ParseResult.GetValueForOption(maxTimeOffsetOption);
+    var forcedSeries = context.ParseResult.GetValueForOption(forcedSeriesOption);
+    var cancellationToken = context.GetCancellationToken();
+    return Download(host, libraryPath, outputPath, useContentServer, resync, after, maxTimeOffset, forcedSeries, cancellationToken);
+});
 
 var metadataCommand = new Command("metadata")
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-metadataCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool, int, System.IO.FileInfo?, System.Threading.CancellationToken>(Metadata, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, maxTimeOffsetOption, forcedSeriesOption);
+metadataCommand.SetHandler(
+    Metadata,
+    EBook.Downloader.Bind.FromServiceProvider<IHost>(),
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+    EBook.Downloader.CommandLine.UseContentServerOption,
+    maxTimeOffsetOption,
+    forcedSeriesOption,
+    EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
 
 var rootCommand = new RootCommand("Standard EBook Downloader")
 {
@@ -181,7 +197,7 @@ static async Task Download(
         : Array.Empty<string>();
 
     var atomUri = new Uri(AtomUrl);
-    var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri).ConfigureAwait(false);
+    var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri, cancellationToken).ConfigureAwait(false);
     using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
         .Where(item => item.LastUpdatedTime > sentinelDateTime)
@@ -324,14 +340,14 @@ static async Task Download(
         return link.Uri.IsAbsoluteUri ? link.Uri : new Uri(atomUri, link.Uri.OriginalString);
     }
 
-    static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri)
+    static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri, CancellationToken cancellationToken)
     {
-        var bytes = await cache.GetAsync("atom").ConfigureAwait(false);
+        var bytes = await cache.GetAsync("atom", cancellationToken).ConfigureAwait(false);
         if (bytes is null)
         {
             var client = httpClientFactory.CreateClient();
-            bytes = await client.GetByteArrayAsync(uri).ConfigureAwait(false);
-            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) }).ConfigureAwait(false);
+            bytes = await client.GetByteArrayAsync(uri, cancellationToken).ConfigureAwait(false);
+            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) }, cancellationToken).ConfigureAwait(false);
         }
 
         var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
@@ -396,5 +412,3 @@ static async Task Metadata(
         }
     }
 }
-
-#pragma warning restore MA0047, SA1516

@@ -22,7 +22,7 @@ var rootCommand = new RootCommand("Syncfusion EBook Updater")
     coverOption,
 };
 
-rootCommand.SetHandler<IHost, DirectoryInfo, bool, bool, CancellationToken>(Process, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, coverOption);
+rootCommand.SetHandler(Process, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, coverOption, EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
 
 var builder = new CommandLineBuilder(rootCommand)
     .UseDefaults()
@@ -198,7 +198,7 @@ static async Task Process(
         {
             foreach (var sourceCodeSection in sourceCodeSections.Where(node => node.HasChildNodes))
             {
-                var anchor = sourceCodeSection.ChildNodes.Single(n => string.Equals(n.Name,  "a", StringComparison.Ordinal));
+                var anchor = sourceCodeSection.ChildNodes.Single(n => string.Equals(n.Name, "a", StringComparison.Ordinal));
                 var href = anchor.GetAttributeValue("href", string.Empty);
                 if (!string.IsNullOrEmpty(href))
                 {
@@ -219,12 +219,12 @@ static async Task Process(
                 imagePath = await GetImageAsync(client, uri, document, cancellationToken).ConfigureAwait(false);
             }
 
-            fields.Add((StandardField.Identifiers, new Identifier("isbn", actualIsbn ?? isbn)));
+            fields.Add((StandardField.Identifiers, new Identifier("isbn", actualIsbn ?? isbn ?? string.Empty)));
             fields.Add((StandardField.Identifiers, new Identifier("uri", requestUri ?? uri)));
             fields.Add((StandardField.Comments, actualDescription ?? description));
             if (actualGithub is not null)
             {
-                fields.Add((StandardField.Identifiers, new Identifier("github", actualGithub ?? gitHub)));
+                fields.Add((StandardField.Identifiers, new Identifier("github", actualGithub)));
             }
         }
 
@@ -245,12 +245,12 @@ static async Task Process(
                 .ConfigureAwait(false);
         }
 
-        static bool IsbnHasChanged(string isbn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualIsbn)
+        static bool IsbnHasChanged(string? isbn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualIsbn)
         {
             return actualIsbn is not null && !string.Equals(isbn, actualIsbn, StringComparison.Ordinal);
         }
 
-        static bool DescriptionHasChanged(string description, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualDescription)
+        static bool DescriptionHasChanged(string? description, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualDescription)
         {
             return actualDescription is not null && !string.Equals(description, actualDescription, StringComparison.Ordinal);
         }
@@ -260,7 +260,7 @@ static async Task Process(
             return requestUri is not null && uri != requestUri;
         }
 
-        static bool GitHubHasChanged(string github, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualGitHub)
+        static bool GitHubHasChanged(string? github, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? actualGitHub)
         {
             return !string.Equals(github, actualGitHub, StringComparison.Ordinal);
         }

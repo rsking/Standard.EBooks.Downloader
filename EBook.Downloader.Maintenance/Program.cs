@@ -18,14 +18,14 @@ var tagsCommand = new Command(nameof(Tags).ToLowerInvariant())
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-tagsCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool>(Tags, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
+tagsCommand.SetHandler(Tags, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
 
 var descriptionCommand = new Command(nameof(Description).ToLowerInvariant())
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-descriptionCommand.SetHandler<IHost, System.IO.DirectoryInfo, bool>(Description, EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
+descriptionCommand.SetHandler(Description, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
 
 var rootCommand = new RootCommand("Calibre EBook Maintenence")
 {
