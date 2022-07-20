@@ -357,7 +357,7 @@ public class CalibreDb
 #if NETSTANDARD2_0
         using (writer)
 #else
-        await using (writer)
+        await using (writer.ConfigureAwait(false))
 #endif
         {
             await this.ExecuteCalibreDbAsync(
