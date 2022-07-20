@@ -124,12 +124,14 @@ public class CalibreLibrary : IDisposable
     /// <param name="info">The EPUB info.</param>
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="forcedSeries">The forced series.</param>
+    /// <param name="forcedSets">The forced sets.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
     public Task<bool> AddOrUpdateAsync(
         EpubInfo info,
         int maxTimeOffset,
         IList<string>? forcedSeries = default,
+        IList<string>? forcedSets = default,
         CancellationToken cancellationToken = default)
     {
         if (info is null)
@@ -164,7 +166,7 @@ public class CalibreLibrary : IDisposable
                 if (book?.Path is not null && book.Name is not null)
                 {
                     UpdateLastWriteTime(book.Path, book.Name, info);
-                    await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
+                    await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>(), forcedSets ?? Array.Empty<string>()).ConfigureAwait(false);
                 }
 
                 return true;
@@ -192,7 +194,7 @@ public class CalibreLibrary : IDisposable
                     info.Path.CopyTo(fullPath, overwrite: true);
                 }
 
-                await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>()).ConfigureAwait(false);
+                await UpdateMetadata(book, forcedSeries ?? Array.Empty<string>(), forcedSets ?? Array.Empty<string>()).ConfigureAwait(false);
 
                 return true;
             }
@@ -275,9 +277,9 @@ public class CalibreLibrary : IDisposable
                 }
             }
 
-            async Task UpdateMetadata(CalibreBook book, IList<string> forcedSeries)
+            async Task UpdateMetadata(CalibreBook book, IList<string> forcedSeries, IList<string> forcedSets)
             {
-                await this.UpdateAsync(book, info, forcedSeries, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                await this.UpdateAsync(book, info, forcedSeries, forcedSets, maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
 
             void UpdateLastWriteTime(string path, string name, EpubInfo info)
@@ -297,10 +299,11 @@ public class CalibreLibrary : IDisposable
     /// <param name="book">The calibre book.</param>
     /// <param name="epub">The EPUB info.</param>
     /// <param name="forcedSeries">The collections that should be forced to a series.</param>
+    /// <param name="forcedSets">The collections that should be forced to a set.</param>
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task associated with this function.</returns>
-    public Task UpdateAsync(CalibreBook book, EpubInfo epub, IEnumerable<string> forcedSeries, int maxTimeOffset, CancellationToken cancellationToken = default)
+    public Task UpdateAsync(CalibreBook book, EpubInfo epub, IEnumerable<string> forcedSeries, IEnumerable<string> forcedSets, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (book is null)
         {
@@ -309,14 +312,14 @@ public class CalibreLibrary : IDisposable
 
         System.Diagnostics.Contracts.Contract.EndContractBlock();
 
-        return UpdateInternalAsync(book, epub, forcedSeries.ToArray(), maxTimeOffset, cancellationToken);
+        return UpdateInternalAsync(book, epub, forcedSeries.ToArray(), forcedSets.ToArray(), maxTimeOffset, cancellationToken);
 
-        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, IList<string> forcedSeriesList, int maxTimeOffset, CancellationToken cancellationToken = default)
+        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, IList<string> forcedSeriesList, IList<string> forcedSetsList, int maxTimeOffset, CancellationToken cancellationToken = default)
         {
             var series = epub.Collections
-                .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList));
+                .FirstOrDefault(collection => collection.IsSeries(forcedSeriesList, forcedSetsList));
             var sets = epub.Collections
-                .Where(collection => collection.IsSet(forcedSeriesList))
+                .Where(collection => collection.IsSet(forcedSeriesList, forcedSetsList))
                 .Select(collection => collection.Name);
 
             (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);

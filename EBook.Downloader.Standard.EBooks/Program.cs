@@ -27,6 +27,7 @@ const string AtomUrl = "https://standardebooks.org/opds/all";
 
 var maxTimeOffsetOption = new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset");
 var forcedSeriesOption = new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series");
+var forcedSetsOption = new Option<FileInfo?>(new[] { "-s", "--forced-sets" }, "A files containing the names of sets that should be sets");
 
 var outputPathOption = new Option<DirectoryInfo>(new[] { "-o", "--output-path" }, () => new DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
 var resyncOption = new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync");
@@ -50,8 +51,9 @@ downloadCommand.SetHandler(context =>
     var after = context.ParseResult.GetValueForOption(afterOption);
     var maxTimeOffset = context.ParseResult.GetValueForOption(maxTimeOffsetOption);
     var forcedSeries = context.ParseResult.GetValueForOption(forcedSeriesOption);
+    var forcesSets = context.ParseResult.GetValueForOption(forcedSetsOption);
     var cancellationToken = context.GetCancellationToken();
-    return Download(host, libraryPath, outputPath, useContentServer, resync, after, maxTimeOffset, forcedSeries, cancellationToken);
+    return Download(host, libraryPath, outputPath, useContentServer, resync, after, maxTimeOffset, forcedSeries, forcesSets, cancellationToken);
 });
 
 var metadataCommand = new Command("metadata")
@@ -66,6 +68,7 @@ metadataCommand.SetHandler(
     EBook.Downloader.CommandLine.UseContentServerOption,
     maxTimeOffsetOption,
     forcedSeriesOption,
+    forcedSetsOption,
     EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
 
 var rootCommand = new RootCommand("Standard EBook Downloader")
@@ -77,6 +80,7 @@ var rootCommand = new RootCommand("Standard EBook Downloader")
 rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
 rootCommand.AddGlobalOption(maxTimeOffsetOption);
 rootCommand.AddGlobalOption(forcedSeriesOption);
+rootCommand.AddGlobalOption(forcedSetsOption);
 
 var builder = new CommandLineBuilder(rootCommand)
     .UseDefaults()
@@ -149,6 +153,7 @@ static async Task Download(
     DateTime? after = default,
     int maxTimeOffset = MaxTimeOffset,
     FileInfo? forcedSeries = default,
+    FileInfo? forcedSets = default,
     CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
@@ -194,6 +199,9 @@ static async Task Download(
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     var forcedSeriesList = forcedSeries?.Exists == true
         ? await File.ReadAllLinesAsync(forcedSeries.FullName, cancellationToken).ConfigureAwait(false)
+        : Array.Empty<string>();
+    var forcedSetsList = forcedSets?.Exists == true
+        ? await File.ReadAllLinesAsync(forcedSets.FullName, cancellationToken).ConfigureAwait(false)
         : Array.Empty<string>();
 
     var atomUri = new Uri(AtomUrl);
@@ -290,7 +298,7 @@ static async Task Download(
             }
 
             var epubInfo = EpubInfo.Parse(path, !kepub);
-            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesList, cancellationToken).ConfigureAwait(false))
+            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesList, forcedSetsList, cancellationToken).ConfigureAwait(false))
             {
                 programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
                 epubInfo.Path.Delete();
@@ -394,12 +402,16 @@ static async Task Metadata(
     bool useContentServer = false,
     int maxTimeOffset = MaxTimeOffset,
     FileInfo? forcedSeries = default,
+    FileInfo? forcedSets = default,
     CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
     using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     var forcedSeriesList = forcedSeries?.Exists == true
         ? await File.ReadAllLinesAsync(forcedSeries.FullName, cancellationToken).ConfigureAwait(false)
+        : Array.Empty<string>();
+    var forcedSetsList = forcedSets?.Exists == true
+        ? await File.ReadAllLinesAsync(forcedSets.FullName, cancellationToken).ConfigureAwait(false)
         : Array.Empty<string>();
 
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
@@ -408,7 +420,7 @@ static async Task Metadata(
         var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
         if (File.Exists(filePath))
         {
-            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesList, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesList, forcedSetsList, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
 }

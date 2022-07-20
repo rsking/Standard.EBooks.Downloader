@@ -99,10 +99,11 @@ public static class ExtensionMethods
     /// </summary>
     /// <param name="collection">The collection.</param>
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
+    /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Series"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSeries(this EpubCollection collection, IList<string> forcedSeries) => collection.Type switch
+    public static bool IsSeries(this EpubCollection collection, IList<string> forcedSeries, IList<string> forcedSets) => collection.Type switch
     {
-        EpubCollectionType.Series => true,
+        EpubCollectionType.Series => forcedSets.IndexOf(collection.Name) < 0,
         EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) >= 0,
         _ => false,
     };
@@ -111,10 +112,12 @@ public static class ExtensionMethods
     /// Determines whether the collect is a <see cref="EpubCollectionType.Set"/>.
     /// </summary>
     /// <param name="collection">The collection.</param>
-    /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
+    /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>
+    /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Set"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSet(this EpubCollection collection, IList<string> forcedSeries) => collection.Type switch
+    public static bool IsSet(this EpubCollection collection, IList<string> forcedSeries, IList<string> forcedSets) => collection.Type switch
     {
+        EpubCollectionType.Series => forcedSets.IndexOf(collection.Name) >= 0,
         EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) < 0,
         _ => false,
     };
