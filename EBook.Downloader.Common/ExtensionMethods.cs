@@ -73,7 +73,7 @@ public static class ExtensionMethods
             ? new HttpClient()
             : clientFactory.CreateClient();
         using var response = await client.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        _ = response.EnsureSuccessStatusCode();
         await response.Content.ReadAsFileAsync(fileName, overwrite, cancellationToken).ConfigureAwait(false);
     }
 
@@ -101,10 +101,10 @@ public static class ExtensionMethods
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Series"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSeries(this EpubCollection collection, IList<string> forcedSeries, IList<string> forcedSets) => collection.Type switch
+    public static bool IsSeries(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection.Type switch
     {
-        EpubCollectionType.Series => forcedSets.IndexOf(collection.Name) < 0,
-        EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) >= 0,
+        EpubCollectionType.Series => !forcedSets.IsAnyMatch(collection.Name),
+        EpubCollectionType.Set => forcedSeries.IsAnyMatch(collection.Name),
         _ => false,
     };
 
@@ -115,12 +115,14 @@ public static class ExtensionMethods
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Set"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSet(this EpubCollection collection, IList<string> forcedSeries, IList<string> forcedSets) => collection.Type switch
+    public static bool IsSet(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection.Type switch
     {
-        EpubCollectionType.Series => forcedSets.IndexOf(collection.Name) >= 0,
-        EpubCollectionType.Set => forcedSeries.IndexOf(collection.Name) < 0,
+        EpubCollectionType.Series => forcedSets.IsAnyMatch(collection.Name),
+        EpubCollectionType.Set => !forcedSeries.IsAnyMatch(collection.Name),
         _ => false,
     };
+
+    private static bool IsAnyMatch(this IEnumerable<System.Text.RegularExpressions.Regex> regexs, string input) => regexs.Any(regex => regex.IsMatch(input));
 
     private static async Task ReadAsFileAsync(this HttpContent content, string fileName, bool overwrite, CancellationToken cancellationToken = default)
     {

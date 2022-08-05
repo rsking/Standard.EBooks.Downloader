@@ -197,12 +197,8 @@ static async Task Download(
 
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
-    var forcedSeriesList = forcedSeries?.Exists == true
-        ? await File.ReadAllLinesAsync(forcedSeries.FullName, cancellationToken).ConfigureAwait(false)
-        : Array.Empty<string>();
-    var forcedSetsList = forcedSets?.Exists == true
-        ? await File.ReadAllLinesAsync(forcedSets.FullName, cancellationToken).ConfigureAwait(false)
-        : Array.Empty<string>();
+    var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
+    var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
     var atomUri = new Uri(AtomUrl);
     var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri, cancellationToken).ConfigureAwait(false);
@@ -298,7 +294,7 @@ static async Task Download(
             }
 
             var epubInfo = EpubInfo.Parse(path, !kepub);
-            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesList, forcedSetsList, cancellationToken).ConfigureAwait(false))
+            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesEnumerable, forcedSetsEnumerable, cancellationToken).ConfigureAwait(false))
             {
                 programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
                 epubInfo.Path.Delete();
@@ -407,12 +403,8 @@ static async Task Metadata(
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
     using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
-    var forcedSeriesList = forcedSeries?.Exists == true
-        ? await File.ReadAllLinesAsync(forcedSeries.FullName, cancellationToken).ConfigureAwait(false)
-        : Array.Empty<string>();
-    var forcedSetsList = forcedSets?.Exists == true
-        ? await File.ReadAllLinesAsync(forcedSets.FullName, cancellationToken).ConfigureAwait(false)
-        : Array.Empty<string>();
+    var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
+    var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
@@ -420,7 +412,20 @@ static async Task Metadata(
         var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
         if (File.Exists(filePath))
         {
-            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesList, forcedSetsList, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
+}
+
+static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileInfo? input)
+{
+    if (input?.Exists != true)
+    {
+        return Array.Empty<System.Text.RegularExpressions.Regex>();
+    }
+
+    return File
+        .ReadLines(input.FullName)
+        .Select(line => new System.Text.RegularExpressions.Regex(line))
+        .ToArray();
 }
