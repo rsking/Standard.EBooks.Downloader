@@ -15,7 +15,7 @@
   
   <PropertyGroup Label="Versions">
     <DotNetVersion>6.0.0</DotNetVersion>
-    <DotNetPatchVersion>6.0.7</DotNetPatchVersion>
+    <DotNetPatchVersion>6.0.8</DotNetPatchVersion>
     <HtmlAgilityPackVersion>1.11.43</HtmlAgilityPackVersion>
     <SystemCommandLineHostingVersion>0.4.0-alpha.22272.1</SystemCommandLineHostingVersion>
     <SerilogVersion>6.0.1</SerilogVersion>
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.705">
+    <PackageReference Include="Meziantou.Analyzer" Version="1.0.717">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -35,7 +35,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="8.42.0.51121">
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="8.44.0.52574">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
