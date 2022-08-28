@@ -23,7 +23,7 @@ const int SentinelRetryWait = 100;
 
 const int MaxTimeOffset = 180;
 
-const string AtomUrl = "https://standardebooks.org/opds/all";
+const string AtomUrl = "https://standardebooks.org/feeds/atom/new-releases";
 
 var maxTimeOffsetOption = new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset");
 var forcedSeriesOption = new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series");
