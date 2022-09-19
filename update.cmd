@@ -1,0 +1,1 @@
+dotnet run --project "%~dp0EBook.Downloader.Standard.EBooks" update "%OneDriveConsumer%\Books" --output-path "%USERPROFILE%\Downloads\books" --use-content-server --forced-series "%OneDriveConsumer%\Books\forced_series.txt" --forced-sets "%OneDriveConsumer%\Books\forced_sets.txt" %*

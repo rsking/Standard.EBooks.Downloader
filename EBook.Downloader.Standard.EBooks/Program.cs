@@ -71,10 +71,28 @@ metadataCommand.SetHandler(
     forcedSetsOption,
     EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
 
+var updateCommand = new Command("update")
+{
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+    outputPathOption,
+};
+
+updateCommand.SetHandler(
+    Update,
+    EBook.Downloader.Bind.FromServiceProvider<IHost>(),
+    EBook.Downloader.CommandLine.LibraryPathArgument,
+    outputPathOption,
+    EBook.Downloader.CommandLine.UseContentServerOption,
+    maxTimeOffsetOption,
+    forcedSeriesOption,
+    forcedSetsOption,
+    EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
+
 var rootCommand = new RootCommand("Standard EBook Downloader")
 {
     downloadCommand,
     metadataCommand,
+    updateCommand,
 };
 
 rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
@@ -105,6 +123,10 @@ var builder = new CommandLineBuilder(rootCommand)
                         .AddSqliteCache(options => options.CachePath = "C:\\Temp\\http.cache.sqlite");
                     services
                         .AddHttpClient(string.Empty)
+                        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
+                    services
+                        .AddHttpClient("direct")
+                        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
                     services
                         .AddHttpClient("header")
@@ -218,87 +240,28 @@ static async Task Download(
         {
             // get the date time
             var extension = uri.GetExtension();
-            var kepub = string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
-            var book = await calibreLibrary
-                .GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension, cancellationToken)
-                .ConfigureAwait(false);
-            var lastWriteTimeUtc = DateTime.MinValue;
-            if (book is not null)
-            {
-                var filePath = book.GetFullPath(calibreLibrary.Path, extension);
-                if (File.Exists(filePath))
-                {
-                    lastWriteTimeUtc = File.GetLastWriteTimeUtc(filePath);
 
-                    // Only update the description/last modified from the EPUB
-                    if (!kepub)
-                    {
-                        // see if we should update the date time
-                        await calibreLibrary.UpdateLastModifiedAsync(book, lastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-                else
-                {
-                    // book should exist here!
-                    programLogger.LogError("Failed to find {Title} - {Name} - {Extension}", item.Title.Text, name, extension.TrimStart('.'));
-                }
-            }
-            else
-            {
-                programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
-            }
-
-            var actualUri = await uri.ShouldDownloadAsync(
-                lastWriteTimeUtc,
-                httpClientFactory,
-                url =>
-                {
-                    var uriString = url.ToString();
-                    var baseUri = uriString[..(uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1)];
-
-                    var split = GetFileNameWithoutExtension(uriString).Split('_');
-                    var number = Math.Max(split.Length - 1, 2);
-                    split = split[..number];
-                    var fileName = string.Join('_', split.Take(number));
-                    return new Uri(baseUri + fileName + GetExtension(uriString));
-
-                    static string GetFileNameWithoutExtension(string path)
-                    {
-                        var fileName = GetFileName(path);
-                        return fileName[..fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)];
-                    }
-
-                    static string GetExtension(string path)
-                    {
-                        var fileName = GetFileName(path);
-                        return fileName[fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)..];
-                    }
-
-                    static string GetFileName(string path)
-                    {
-                        return path[(path.LastIndexOf('/') + 1)..];
-                    }
-                },
+            var lastWriteTimeUtc = await GetLastWriteTimeFromItem(
+                programLogger,
+                item,
+                calibreLibrary,
+                name,
+                extension,
+                maxTimeOffset,
                 cancellationToken).ConfigureAwait(false);
 
-            if (actualUri is null)
-            {
-                continue;
-            }
-
-            // download this
-            var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory, cancellationToken).ConfigureAwait(false);
-            if (path is null)
-            {
-                continue;
-            }
-
-            var epubInfo = EpubInfo.Parse(path, !kepub);
-            if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeriesEnumerable, forcedSetsEnumerable, cancellationToken).ConfigureAwait(false))
-            {
-                programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
-                epubInfo.Path.Delete();
-            }
+            await DownloadIfRequired(
+                programLogger,
+                calibreLibrary,
+                httpClientFactory,
+                uri,
+                lastWriteTimeUtc,
+                outputPath,
+                extension,
+                forcedSeriesEnumerable,
+                forcedSetsEnumerable,
+                maxTimeOffset,
+                cancellationToken).ConfigureAwait(false);
         }
 
         lock (sentinelLock)
@@ -364,31 +327,36 @@ static async Task Download(
         return atom;
     }
 
-    static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+    static async Task<DateTime> GetLastWriteTimeFromItem(
+        Microsoft.Extensions.Logging.ILogger programLogger,
+        System.ServiceModel.Syndication.SyndicationItem item,
+        CalibreLibrary calibreLibrary,
+        string name,
+        string extension,
+        int maxTimeOffset,
+        CancellationToken cancellationToken)
     {
-        // create the file name
-        var fileName = uri.GetFileName();
-        var fullPath = Path.GetFullPath(Path.Combine(path, GetHashedName(fileName)));
-        if (!File.Exists(fullPath))
+        var book = await calibreLibrary
+            .GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension, cancellationToken)
+            .ConfigureAwait(false);
+
+        DateTime lastWriteTimeUtc = default;
+        if (book is not null)
         {
-            logger.LogInformation("Downloading book {FileName}", fileName);
-            try
+            lastWriteTimeUtc = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+
+            if (lastWriteTimeUtc == default)
             {
-                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory, cancellationToken).ConfigureAwait(false);
-            }
-            catch (HttpRequestException ex)
-            {
-                logger.LogError(ex, "{Message}", ex.Message);
-                return default;
+                // book should exist here!
+                programLogger.LogError("Failed to find {Title} - {Name} - {Extension}", item.Title.Text, name, extension.TrimStart('.'));
             }
         }
-
-        return fullPath;
-
-        static string GetHashedName(string fileName)
+        else
         {
-            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
+            programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
         }
+
+        return lastWriteTimeUtc;
     }
 }
 
@@ -417,6 +385,197 @@ static async Task Metadata(
     }
 }
 
+static async Task Update(
+    IHost host,
+    DirectoryInfo calibreLibraryPath,
+    DirectoryInfo outputPath,
+    bool useContentServer = false,
+    int maxTimeOffset = MaxTimeOffset,
+    FileInfo? forcedSeries = default,
+    FileInfo? forcedSets = default,
+    CancellationToken cancellationToken = default)
+{
+    var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
+    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+    var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
+    var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
+    var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
+    var parser = new AngleSharp.Html.Parser.HtmlParser();
+
+    // get all the books from standard e-books
+    await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
+    {
+        if (book.Identifiers.TryGetValue("url", out var uriValue) && uriValue is Uri uri)
+        {
+            await foreach (var bookUri in GetBookUris(programLogger, parser, uri, httpClientFactory, cancellationToken).ConfigureAwait(false))
+            {
+                if (!IsValidEpub(bookUri))
+                {
+                    continue;
+                }
+
+                // get the extension
+                var extension = GetExtension(bookUri);
+                var last = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                await DownloadIfRequired(programLogger, calibreLibrary, httpClientFactory, bookUri, last, outputPath, extension, forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        static bool IsValidEpub(Uri uri)
+        {
+            return uri.PathAndQuery.EndsWith("_advanced.epub", StringComparison.OrdinalIgnoreCase) || uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static string GetExtension(Uri uri)
+        {
+            if (uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase))
+            {
+                return ".kepub";
+            }
+
+            return ".epub";
+        }
+    }
+
+    static async IAsyncEnumerable<Uri> GetBookUris(
+        Microsoft.Extensions.Logging.ILogger logger,
+        AngleSharp.Html.Parser.HtmlParser parser,
+        Uri pageUri,
+        IHttpClientFactory httpClientFactory,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient();
+
+        AngleSharp.Html.Dom.IHtmlDocument document;
+
+        try
+        {
+            using var response = await client.GetAsync(pageUri, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using (stream.ConfigureAwait(false))
+            {
+                document = await parser.ParseDocumentAsync(stream, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to download/parse {Uri}", pageUri);
+            yield break;
+        }
+
+        foreach (var attributes in document
+            .GetElementsByClassName("epub")
+            .Concat(document.GetElementsByClassName("kobo"))
+            .Select(element => element.Attributes))
+        {
+            if (attributes.GetNamedItem("property") is AngleSharp.Dom.IAttr propertyAttribute
+                && propertyAttribute.Value is string propertyAttributeValue
+                && string.Equals(propertyAttributeValue, "schema:contentUrl", StringComparison.Ordinal)
+                && attributes["href"] is AngleSharp.Dom.IAttr hrefAttribute
+                && Uri.TryCreate(hrefAttribute.Value, UriKind.RelativeOrAbsolute, out var uri))
+            {
+                yield return uri.IsAbsoluteUri
+                    ? uri
+                    : new Uri(pageUri, uri);
+            }
+        }
+    }
+}
+
+static async Task DownloadIfRequired(
+    Microsoft.Extensions.Logging.ILogger programLogger,
+    CalibreLibrary calibreLibrary,
+    IHttpClientFactory httpClientFactory,
+    Uri uri,
+    DateTime lastWriteTimeUtc,
+    DirectoryInfo outputPath,
+    string extension,
+    IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
+    IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
+    int maxTimeOffset,
+    CancellationToken cancellationToken)
+{
+    var actualUri = await uri.ShouldDownloadAsync(
+        lastWriteTimeUtc,
+        httpClientFactory,
+        url =>
+        {
+            var uriString = url.ToString();
+            var baseUri = uriString[..(uriString.LastIndexOf("/", StringComparison.OrdinalIgnoreCase) + 1)];
+
+            var split = GetFileNameWithoutExtension(uriString).Split('_');
+            var number = Math.Max(split.Length - 1, 2);
+            split = split[..number];
+            var fileName = string.Join('_', split.Take(number));
+            return new Uri(baseUri + fileName + GetExtension(uriString));
+
+            static string GetFileNameWithoutExtension(string path)
+            {
+                var fileName = GetFileName(path);
+                return fileName[..fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)];
+            }
+
+            static string GetExtension(string path)
+            {
+                var fileName = GetFileName(path);
+                return fileName[fileName.IndexOf('.', StringComparison.OrdinalIgnoreCase)..];
+            }
+
+            static string GetFileName(string path)
+            {
+                return path[(path.LastIndexOf('/') + 1)..];
+            }
+        },
+        cancellationToken).ConfigureAwait(false);
+    if (actualUri is null)
+    {
+        return;
+    }
+
+    // download this
+    var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory, cancellationToken).ConfigureAwait(false);
+    if (path is null)
+    {
+        return;
+    }
+
+    var epubInfo = EpubInfo.Parse(path, !IsKePub(extension));
+    if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeries, forcedSets, cancellationToken).ConfigureAwait(false))
+    {
+        programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
+        epubInfo.Path.Delete();
+    }
+
+    static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+    {
+        // create the file name
+        var fileName = uri.GetFileName();
+        var fullPath = Path.GetFullPath(Path.Combine(path, GetHashedName(fileName)));
+        if (!File.Exists(fullPath))
+        {
+            logger.LogInformation("Downloading book {FileName}", fileName);
+            try
+            {
+                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogError(ex, "{Message}", ex.Message);
+                return default;
+            }
+        }
+
+        return fullPath;
+
+        static string GetHashedName(string fileName)
+        {
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
+        }
+    }
+}
+
 static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileInfo? input)
 {
     if (input?.Exists != true)
@@ -426,6 +585,35 @@ static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileIn
 
     return File
         .ReadLines(input.FullName)
-        .Select(line => new System.Text.RegularExpressions.Regex(line))
+        .Select(line => new System.Text.RegularExpressions.Regex(line, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)))
         .ToArray();
+}
+
+static async Task<DateTime> GetLastWriteTime(
+    CalibreLibrary calibreLibrary,
+    CalibreBook book,
+    string extension,
+    int maxTimeOffset,
+    CancellationToken cancellationToken)
+{
+    DateTime lastWriteTimeUtc = default;
+    var filePath = book.GetFullPath(calibreLibrary.Path, extension);
+    if (File.Exists(filePath))
+    {
+        lastWriteTimeUtc = File.GetLastWriteTimeUtc(filePath);
+
+        // Only update the description/last modified from the EPUB
+        if (!IsKePub(extension))
+        {
+            // see if we should update the date time
+            await calibreLibrary.UpdateLastModifiedAsync(book, lastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    return lastWriteTimeUtc;
+}
+
+static bool IsKePub(string extension)
+{
+    return string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
 }

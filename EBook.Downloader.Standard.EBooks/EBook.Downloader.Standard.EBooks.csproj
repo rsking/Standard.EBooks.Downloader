@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="0.17.1" />
     <PackageReference Include="ChronicNetCore" Version="1.0.0" />
     <PackageReference Include="HtmlAgilityPack" Version="$(HtmlAgilityPackVersion)" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="$(DotNetVersion)" />

@@ -35,6 +35,30 @@ public record class CalibreBook
         this.Path = FormattableString.Invariant($"{sanitizedAuthor}/{TrimIfRequired(sanitisedName, 35)} ({this.Id})");
         this.LastModified = element.GetProperty("last_modified").GetDateTime().ToUniversalTime();
 
+        // identifiers
+        if (element.TryGetProperty("identifiers", out var identifiers))
+        {
+            this.Identifiers = GetItems(identifiers).
+                ToDictionary<KeyValuePair<string, System.Text.Json.JsonElement>, string, object>(
+                    kvp => kvp.Key,
+                    kvp =>
+                    {
+                        var stringValue = kvp.Value.ToString();
+                        return Uri.TryCreate(stringValue, UriKind.Absolute, out var uri) ? uri : stringValue;
+                    },
+                    StringComparer.Ordinal);
+
+            static IEnumerable<KeyValuePair<string, System.Text.Json.JsonElement>> GetItems(System.Text.Json.JsonElement element)
+            {
+                var enumerator = element.EnumerateObject();
+
+                while (enumerator.MoveNext())
+                {
+                    yield return new(enumerator.Current.Name, enumerator.Current.Value);
+                }
+            }
+        }
+
         static string TrimIfRequired(string input, int length)
         {
             return input.Length > length
@@ -63,6 +87,11 @@ public record class CalibreBook
     /// Gets the authors.
     /// </summary>
     public IReadOnlyList<string> Authors { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the identifiers.
+    /// </summary>
+    public IReadOnlyDictionary<string, object> Identifiers { get; init; } = System.Collections.Immutable.ImmutableDictionary<string, object>.Empty;
 
     /// <summary>
     /// Gets the Path.
@@ -132,15 +161,15 @@ public record class CalibreBook
                 var unicodeCategory = char.GetUnicodeCategory(c);
                 if (c > 128)
                 {
-                    stringBuilder.Append('_').Append('_');
+                    _ = stringBuilder.Append('_').Append('_');
                 }
                 else if (invalidChars.Contains(c))
                 {
-                    stringBuilder.Append('_');
+                    _ = stringBuilder.Append('_');
                 }
                 else if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
                 {
-                    stringBuilder.Append(c);
+                    _ = stringBuilder.Append(c);
                 }
             }
 
