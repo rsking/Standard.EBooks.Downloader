@@ -16,7 +16,6 @@
   <PropertyGroup Label="Versions">
     <DotNetVersion>6.0.0</DotNetVersion>
     <DotNetPatchVersion>6.0.9</DotNetPatchVersion>
-    <HtmlAgilityPackVersion>1.11.46</HtmlAgilityPackVersion>
     <SystemCommandLineHostingVersion>0.4.0-alpha.22272.1</SystemCommandLineHostingVersion>
     <SerilogVersion>6.0.1</SerilogVersion>
   </PropertyGroup>

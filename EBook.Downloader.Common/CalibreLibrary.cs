@@ -6,6 +6,8 @@
 
 namespace EBook.Downloader.Common;
 
+using AngleSharp;
+using AngleSharp.Dom;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -18,6 +20,8 @@ public class CalibreLibrary : IDisposable
     private const string UpdateLastModifiedById = "UPDATE books SET last_modified = :lastModified WHERE id = :id";
 
     private const string SelectLastModifiedById = "SELECT last_modified FROM books WHERE id = :id";
+
+    private static readonly AngleSharp.Html.Parser.HtmlParser Parser = new();
 
     private readonly ILogger logger;
 
@@ -328,7 +332,7 @@ public class CalibreLibrary : IDisposable
             var seriesName = series?.Name;
             var seriesIndex = series?.Position ?? 0;
 
-            var fields = this.UpdateDescription(longDescription, currentLongDescription)
+            var fields = (await this.UpdateDescriptionAsync(longDescription, currentLongDescription, cancellationToken).ConfigureAwait(false))
                 .Concat(this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex))
                 .Concat(this.UpdateSets(sets, currentSets))
                 .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags));
@@ -432,17 +436,7 @@ public class CalibreLibrary : IDisposable
         return identifierValue.Equals(identifier.Value.ToString(), StringComparison.Ordinal);
     }
 
-    private static string? SanitiseHtml(string? html)
-    {
-        if (html is null)
-        {
-            return null;
-        }
-
-        var htmlDocument = new HtmlAgilityPack.HtmlDocument();
-        htmlDocument.LoadHtml(html);
-        return htmlDocument.DocumentNode.OuterHtml;
-    }
+    private static string? SanitiseHtml(string? html) => html is null ? null : Parser.ParseDocument(html).Body?.FirstChild?.Minify();
 
     private static string? GetCurrentLongDescription(System.Text.Json.JsonElement json) => SanitiseHtml(json.GetProperty("comments").GetString());
 
@@ -637,20 +631,64 @@ public class CalibreLibrary : IDisposable
         throw new InvalidOperationException("Failed to get last modified time");
     }
 
-    private IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
-        ? Enumerable.Empty<FieldToUpdate>()
-        : this.UpdateDescription(SanitiseHtml(longDescription.OuterXml), currentLongDescription);
+    private Task<IEnumerable<FieldToUpdate>> UpdateDescriptionAsync(System.Xml.XmlElement? longDescription, string? currentLongDescription, CancellationToken cancellationToken) => longDescription is null
+        ? Task.FromResult(Enumerable.Empty<FieldToUpdate>())
+        : this.UpdateDescriptionAsync(SanitiseHtml(longDescription.OuterXml), currentLongDescription, cancellationToken);
 
-    private IEnumerable<FieldToUpdate> UpdateDescription(string? longDescription, string? currentLongDescription)
+    private async Task<IEnumerable<FieldToUpdate>> UpdateDescriptionAsync(string? longDescription, string? currentLongDescription, CancellationToken cancellationToken)
     {
-        if (string.Equals(currentLongDescription, longDescription, StringComparison.Ordinal))
+        if (longDescription is not null)
         {
-            yield break;
+            var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)/(?<book>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+            var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+            var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+
+            // update the description with internal links
+            var document = await Parser.ParseDocumentAsync(longDescription, cancellationToken).ConfigureAwait(false);
+
+            foreach (var anchor in document.GetElementsByTagName("a").OfType<AngleSharp.Html.Dom.IHtmlAnchorElement>())
+            {
+                if (anchor.Href is string uri)
+                {
+                    if (bookRegex.IsMatch(uri))
+                    {
+                        this.logger.LogDebug("Looking up link to {Uri}", uri);
+                        if (await this.GetCalibreBookAsync(new Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
+                        {
+                            anchor.Href = FormattableString.Invariant($"calibre://show-book/_/{book.Id}");
+                        }
+                    }
+                    else if (authorRegex.IsMatch(uri))
+                    {
+                        this.logger.LogDebug("Found author URI");
+                    }
+                    else if (collectionsRegex.IsMatch(uri))
+                    {
+                        this.logger.LogDebug("Found collections URI");
+                    }
+                    else
+                    {
+                        this.logger.LogWarning("Unknown URI format: {Uri} - {Anchor}", uri, anchor.OuterHtml);
+                    }
+                }
+            }
+
+            longDescription = document.Minify();
         }
 
-        // execute calibredb to update the description
-        this.logger.LogInformation("Updating description to the long description");
-        yield return new FieldToUpdate("comments", longDescription);
+        return DoUpdateDescription(longDescription, currentLongDescription);
+
+        IEnumerable<FieldToUpdate> DoUpdateDescription(string? longDescription, string? currentLongDescription)
+        {
+            if (string.Equals(currentLongDescription, longDescription, StringComparison.Ordinal))
+            {
+                yield break;
+            }
+
+            // execute calibredb to update the description
+            this.logger.LogInformation("Updating description to the long description");
+            yield return new FieldToUpdate("comments", longDescription);
+        }
     }
 
     private IEnumerable<FieldToUpdate> UpdateSeries(string? name, float index, string? currentName, float currentIndex)
