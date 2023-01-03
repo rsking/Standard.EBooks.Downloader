@@ -1,25 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <NoWarn>$(NoWarn);CA1303</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <DotNetVersion>2.1.0</DotNetVersion>
-  </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="AngleSharp" Version="0.17.0" />
-    <PackageReference Include="IsExternalInit" Version="1.0.3">
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="IsExternalInit">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(DotNetVersion)" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="$(DotNetVersion)" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="$(DotNetVersion)" />
-    <PackageReference Include="System.Collections.Immutable" Version="1.2.0" />
-    <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00016" />
+    <PackageReference Include="Microsoft.Data.Sqlite" VersionOverride="2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" VersionOverride="2.1.0" />
+    <PackageReference Include="System.Collections.Immutable" />
+    <PackageReference Include="Lucene.Net.Analysis.Common" />
   </ItemGroup>
 
   <ItemGroup>

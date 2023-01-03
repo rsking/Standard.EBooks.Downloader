@@ -12,36 +12,10 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
-  
-  <PropertyGroup Label="Versions">
-    <DotNetVersion>6.0.0</DotNetVersion>
-    <DotNetPatchVersion>6.0.9</DotNetPatchVersion>
-    <SystemCommandLineHostingVersion>0.4.0-alpha.22272.1</SystemCommandLineHostingVersion>
-    <SerilogVersion>6.0.1</SerilogVersion>
-  </PropertyGroup>
 
   <ItemGroup>
     <AdditionalFiles Include="$([MSBuild]::GetPathOfFileAbove(stylecop.json))" />
     <None Include="$([MSBuild]::GetPathOfFileAbove(.editorconfig))" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Meziantou.Analyzer" Version="1.0.740">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Roslynator.Analyzers" Version="4.1.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="8.47.0.55603">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="StyleCop.Analyzers.Unstable" Version="1.2.0.435">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
   <PropertyGroup Condition=" '$(MSBuildRuntimeType)' == 'Core' ">

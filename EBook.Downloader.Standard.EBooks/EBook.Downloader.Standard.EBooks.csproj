@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,17 +11,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AngleSharp" Version="0.17.1" />
-    <PackageReference Include="ChronicNetCore" Version="1.0.0" />
-    <PackageReference Include="HtmlAgilityPack" Version="$(HtmlAgilityPackVersion)" />
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="$(DotNetVersion)" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="6.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
-    <PackageReference Include="NeoSmart.Caching.Sqlite" Version="6.0.1" />
-    <PackageReference Include="Serilog.AspNetCore" Version="$(SerilogVersion)" />
-    <PackageReference Include="Serilog.Enrichers.Thread" Version="3.1.0" />
-    <PackageReference Include="System.CommandLine.Hosting" Version="$(SystemCommandLineHostingVersion)" />
-    <PackageReference Include="System.ServiceModel.Syndication" Version="$(DotNetVersion)" />
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="ChronicNetCore" />
+    <PackageReference Include="HtmlAgilityPack" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="NeoSmart.Caching.Sqlite" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Enrichers.Thread" />
+    <PackageReference Include="System.CommandLine.Hosting" />
+    <PackageReference Include="System.ServiceModel.Syndication" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,12 +11,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="$(DotNetVersion)" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="6.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
-    <PackageReference Include="System.CommandLine.Hosting" Version="$(SystemCommandLineHostingVersion)" />
-    <PackageReference Include="System.Linq.Async" Version="6.0.1" />
-    <PackageReference Include="System.ServiceModel.Syndication" Version="$(DotNetVersion)" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="System.CommandLine.Hosting" />
+    <PackageReference Include="System.Linq.Async" />
+    <PackageReference Include="System.ServiceModel.Syndication" />
   </ItemGroup>
 
   <ItemGroup>
