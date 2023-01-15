@@ -38,7 +38,7 @@ internal class AsyncManualResetEvent
 
         if (isSet)
         {
-            this.completionSource.TrySetResult(true);
+            _ = this.completionSource.TrySetResult(true);
         }
     }
 
@@ -77,12 +77,12 @@ internal class AsyncManualResetEvent
     {
         if (this.runSynchronousContinuationsOnSetThread)
         {
-            this.completionSource.TrySetResult(true);
+            _ = this.completionSource.TrySetResult(true);
         }
         else
         {
             // Run synchronous completions in the thread pool.
-            Task.Run(() => this.completionSource.TrySetResult(true));
+            _ = Task.Run(() => this.completionSource.TrySetResult(true));
         }
     }
 
@@ -101,18 +101,15 @@ internal class AsyncManualResetEvent
         }
 
         // Otherwise, try to replace it with a new completion source (if it is the same as the reference we took before).
-        Interlocked.CompareExchange(ref this.completionSource, new TaskCompletionSource<bool>(), currentCompletionSource);
+        _ = Interlocked.CompareExchange(ref this.completionSource, new TaskCompletionSource<bool>(), currentCompletionSource);
     }
 
     private Task<bool> AwaitCompletion(int timeoutMS, CancellationToken token)
     {
         // Validate arguments.
-        if (timeoutMS < -1 || timeoutMS > int.MaxValue)
-        {
-            throw new ArgumentException("The timeout must be either -1ms (indefinitely) or a positive ms value <= int.MaxValue", nameof(timeoutMS));
-        }
-
-        return AwaitCompletionCore();
+        return timeoutMS is < -1 or > int.MaxValue
+            ? throw new ArgumentException("The timeout must be either -1ms (indefinitely) or a positive ms value <= int.MaxValue", nameof(timeoutMS))
+            : AwaitCompletionCore();
 
         async Task<bool> AwaitCompletionCore()
         {

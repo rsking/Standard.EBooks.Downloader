@@ -106,33 +106,33 @@ var builder = new CommandLineBuilder(rootCommand)
         Host.CreateDefaultBuilder,
         configureHost =>
         {
-            configureHost
-                .UseSerilog((_, loggerConfiguration) =>
+            _ = configureHost
+                .UseSerilog((__, loggerConfiguration) =>
                 {
-                    loggerConfiguration
-                        .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}");
-                    loggerConfiguration
+                    _ = loggerConfiguration
+                        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}", formatProvider: System.Globalization.CultureInfo.CurrentCulture);
+                    _ = loggerConfiguration
                         .WriteTo.Debug()
                         .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(HttpClient).FullName ?? string.Empty))
                         .Enrich.WithThreadId();
                 });
-            configureHost
-                .ConfigureServices((_, services) =>
+            _ = configureHost
+                .ConfigureServices((__, services) =>
                 {
-                    services
+                    _ = services
                         .AddSqliteCache(options => options.CachePath = "C:\\Temp\\http.cache.sqlite");
-                    services
+                    _ = services
                         .AddHttpClient(string.Empty)
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
-                    services
+                    _ = services
                         .AddHttpClient("direct")
                         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
-                    services
+                    _ = services
                         .AddHttpClient("header")
                         .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, AutomaticDecompression = System.Net.DecompressionMethods.None });
 
-                    services
+                    _ = services
                         .Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
                 });
         })
@@ -156,13 +156,7 @@ static DateTime? ParseArgument(ArgumentResult result)
         }
 
         var parser = new ChronicNetCore.Parser();
-        var parsedSpan = parser.Parse(dateString);
-        if (parsedSpan is null)
-        {
-            return default;
-        }
-
-        return parsedSpan.Start;
+        return parser.Parse(dateString)?.Start;
     }
 }
 
@@ -200,23 +194,15 @@ static async Task Download(
     if (!File.Exists(sentinelPath))
     {
         await File.WriteAllBytesAsync(sentinelPath, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
-        File.SetLastWriteTimeUtc(sentinelPath, new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(sentinelPath, DateTime.UnixEpoch);
     }
 
-    DateTime sentinelDateTime;
-    if (after is not null)
+    var sentinelDateTime = (after, resync) switch
     {
-        sentinelDateTime = after.Value;
-    }
-    else if (resync)
-    {
-        sentinelDateTime = DateTime.MinValue.ToUniversalTime();
-    }
-    else
-    {
-        sentinelDateTime = File.GetLastWriteTimeUtc(sentinelPath);
-    }
-
+        (not null, _) => after.Value,
+        (_, true) => DateTime.MinValue.ToUniversalTime(),
+        _ => File.GetLastWriteTimeUtc(sentinelPath),
+    };
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
@@ -428,12 +414,7 @@ static async Task Update(
 
         static string GetExtension(Uri uri)
         {
-            if (uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase))
-            {
-                return ".kepub";
-            }
-
-            return ".epub";
+            return uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase) ? ".kepub" : ".epub";
         }
     }
 
@@ -451,7 +432,7 @@ static async Task Update(
         try
         {
             using var response = await client.GetAsync(pageUri, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            _ = response.EnsureSuccessStatusCode();
 
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
@@ -578,15 +559,17 @@ static async Task DownloadIfRequired(
 
 static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileInfo? input)
 {
-    if (input?.Exists != true)
-    {
-        return Array.Empty<System.Text.RegularExpressions.Regex>();
-    }
+    return input?.Exists == true
+        ? ReadFromFile(input.FullName)
+        : Array.Empty<System.Text.RegularExpressions.Regex>();
 
-    return File
-        .ReadLines(input.FullName)
-        .Select(line => new System.Text.RegularExpressions.Regex(line, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)))
-        .ToArray();
+    IEnumerable<System.Text.RegularExpressions.Regex> ReadFromFile(string path)
+    {
+        return File
+            .ReadLines(path)
+            .Select(line => new System.Text.RegularExpressions.Regex(line, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1)))
+            .ToArray();
+    }
 }
 
 static async Task<DateTime> GetLastWriteTime(

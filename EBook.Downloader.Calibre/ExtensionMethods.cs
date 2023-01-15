@@ -70,5 +70,5 @@ internal static class ExtensionMethods
     /// <returns>The async task.</returns>
     public static Task WaitForExitAsync(this System.Diagnostics.Process process) => process.HasExited
         ? Task.CompletedTask
-        : Task.Run(() => process.WaitForExit());
+        : Task.Run(process.WaitForExit);
 }

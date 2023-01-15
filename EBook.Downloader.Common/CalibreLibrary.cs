@@ -58,12 +58,12 @@ public class CalibreLibrary : IDisposable
 
         this.updateLastModifiedCommand = this.connection.CreateCommand();
         this.updateLastModifiedCommand.CommandText = UpdateLastModifiedById;
-        this.updateLastModifiedCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
-        this.updateLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+        _ = this.updateLastModifiedCommand.Parameters.Add(":lastModified", Microsoft.Data.Sqlite.SqliteType.Text);
+        _ = this.updateLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
         this.selectLastModifiedCommand = this.connection.CreateCommand();
         this.selectLastModifiedCommand.CommandText = SelectLastModifiedById;
-        this.selectLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
+        _ = this.selectLastModifiedCommand.Parameters.Add(":id", Microsoft.Data.Sqlite.SqliteType.Integer);
 
         var createTriggerCommandText = default(string);
         using (var command = this.connection.CreateCommand())
@@ -195,7 +195,7 @@ public class CalibreLibrary : IDisposable
                         }
                     }
 
-                    info.Path.CopyTo(fullPath, overwrite: true);
+                    _ = info.Path.CopyTo(fullPath, overwrite: true);
                 }
 
                 await UpdateMetadata(book, forcedSeries ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>(), forcedSets ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>()).ConfigureAwait(false);
@@ -227,7 +227,7 @@ public class CalibreLibrary : IDisposable
                     : default;
 
                 // we need to add this
-                var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, languages: "eng", cover: coverFile, tags: tags, cancellationToken: cancellationToken).ConfigureAwait(false);
+                var bookId = await this.calibreDb.AddAsync(info.Path, duplicates: true, tags: tags, cover: coverFile, languages: "eng", cancellationToken: cancellationToken).ConfigureAwait(false);
                 if (coverFile != default && File.Exists(coverFile))
                 {
                     File.Delete(coverFile);
@@ -358,12 +358,7 @@ public class CalibreLibrary : IDisposable
     /// <returns>The task associated with this function.</returns>
     public Task UpdateLastModifiedAsync(CalibreBook book, DateTime lastModified, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
-        if (book is null)
-        {
-            throw new ArgumentNullException(nameof(book));
-        }
-
-        return UpdateLastModifiedAsyncCore();
+        return book is null ? throw new ArgumentNullException(nameof(book)) : UpdateLastModifiedAsyncCore();
 
         async Task UpdateLastModifiedAsyncCore()
         {
@@ -407,34 +402,19 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private static IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate)
-    {
-        if (document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
-        {
-            return Enumerable.Empty<CalibreBook>();
-        }
-
-        return document
+    private static IEnumerable<CalibreBook> GetCalibreBooks(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => document is null || document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array
+            ? Enumerable.Empty<CalibreBook>()
+            : document
           .RootElement
           .EnumerateArray()
           .Where(predicate)
           .Select(GetCalibreBook);
-    }
 
     private static CalibreBook GetCalibreBook(System.Text.Json.JsonElement json) => new(json);
 
     private static CalibreBook? GetCalibreBook(System.Text.Json.JsonDocument? document, Func<System.Text.Json.JsonElement, bool> predicate) => GetCalibreBooks(document, predicate).SingleOrDefault();
 
-    private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier)
-    {
-        var identifierValue = element.GetProperty("identifiers").GetProperty(identifier.Name).ToString();
-        if (identifierValue is null)
-        {
-            return false;
-        }
-
-        return identifierValue.Equals(identifier.Value.ToString(), StringComparison.Ordinal);
-    }
+    private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier) => element.GetProperty("identifiers").GetProperty(identifier.Name).ToString()?.Equals(identifier.Value.ToString(), StringComparison.Ordinal) == true;
 
     private static string? SanitiseHtml(string? html) => html is null ? null : Parser.ParseDocument(html).Body?.FirstChild?.Minify();
 
@@ -446,12 +426,9 @@ public class CalibreLibrary : IDisposable
 
         static string? GetSeries(System.Text.Json.JsonElement json)
         {
-            if (json.TryGetProperty("series", out var seriesProperty))
-            {
-                return seriesProperty.GetString();
-            }
-
-            return default;
+            return json.TryGetProperty("series", out var seriesProperty)
+                ? seriesProperty.GetString()
+                : default;
         }
     }
 
@@ -535,33 +512,21 @@ public class CalibreLibrary : IDisposable
 
             static (string Name, string? Character) Split(string value)
             {
-                var index = value.IndexOf('(');
-                if (index == -1)
+                return value.IndexOf('(') switch
                 {
-                    return (value, default);
-                }
-
-                return (value.Substring(0, index - 1), value.Substring(index));
+                    -1 => (value, default(string)),
+                    (int index) => (value.Substring(0, index - 1), value.Substring(index)),
+                };
             }
 
             static string Join(string name, string? character)
             {
-                if (character is null)
-                {
-                    return name;
-                }
-
-                return $"{name} {character}";
+                return character is null ? name : $"{name} {character}";
             }
 
             static string? ToProperCase(string? strX)
             {
-                if (strX is null)
-                {
-                    return null;
-                }
-
-                return ToProperCaseImpl(strX, ' ', " ", System.Globalization.CultureInfo.CurrentCulture.TextInfo);
+                return strX is null ? null : ToProperCaseImpl(strX, ' ', " ", System.Globalization.CultureInfo.CurrentCulture.TextInfo);
 
                 static string ToProperCaseImpl(string strX, char separator, string join, System.Globalization.TextInfo textInfo)
                 {
@@ -598,14 +563,7 @@ public class CalibreLibrary : IDisposable
                         var currentWord = new System.Text.StringBuilder();
                         foreach (var letter in word)
                         {
-                            if (count == 0)
-                            {
-                                currentWord.Append(textInfo.ToUpper(letter));
-                            }
-                            else
-                            {
-                                currentWord.Append(letter);
-                            }
+                            _ = count == 0 ? currentWord.Append(textInfo.ToUpper(letter)) : currentWord.Append(letter);
 
                             count++;
                         }
@@ -623,12 +581,9 @@ public class CalibreLibrary : IDisposable
         var dateTimeObject = await this.selectLastModifiedCommand
             .ExecuteScalarAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (dateTimeObject is string dataTimeString)
-        {
-            return DateTime.Parse(dataTimeString, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal);
-        }
-
-        throw new InvalidOperationException("Failed to get last modified time");
+        return dateTimeObject is string dataTimeString
+            ? DateTime.Parse(dataTimeString, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal)
+            : throw new InvalidOperationException("Failed to get last modified time");
     }
 
     private Task<IEnumerable<FieldToUpdate>> UpdateDescriptionAsync(System.Xml.XmlElement? longDescription, string? currentLongDescription, CancellationToken cancellationToken) => longDescription is null
@@ -831,14 +786,14 @@ public class CalibreLibrary : IDisposable
 
             if (this.dropTriggerCommand is not null)
             {
-                await this.dropTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                _ = await this.dropTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            await this.updateLastModifiedCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            _ = await this.updateLastModifiedCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             if (this.createTriggerCommand is not null)
             {
-                await this.createTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                _ = await this.createTriggerCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
     }

@@ -30,16 +30,16 @@ var builder = new CommandLineBuilder(rootCommand)
         Host.CreateDefaultBuilder,
         configureHost =>
         {
-            configureHost
+            _ = configureHost
                 .UseSerilog((_, loggerConfiguration) => loggerConfiguration
                     .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
                     .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(HttpClient).FullName ?? string.Empty))
                     .Enrich.WithThreadId());
-            configureHost
+            _ = configureHost
                 .ConfigureServices((_, services) =>
                 {
-                    services.AddHttpClient(string.Empty);
-                    services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
+                    _ = (HostBuilderContext)services.AddHttpClient(string.Empty);
+                    _ = (HostBuilderContext)services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
                 });
         });
 

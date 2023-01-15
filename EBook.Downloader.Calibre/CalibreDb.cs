@@ -37,6 +37,8 @@ public class CalibreDb
 
     private static readonly string IntegrationStatusFalse = IntegrationStatus + ": " + bool.FalseString;
 
+    private readonly System.Xml.Serialization.XmlSerializer xmlSerializer = new(typeof(Opf.Package));
+
     private readonly ILogger logger;
 
     private readonly string calibreDbPath;
@@ -92,7 +94,7 @@ public class CalibreDb
     {
         var stringBuilder = new StringBuilder();
         var fieldsValue = fields is null ? string.Empty : string.Join(",", fields);
-        stringBuilder.AppendFormatIf(!string.IsNullOrEmpty(fieldsValue), System.Globalization.CultureInfo.InvariantCulture, " --fields={0}", fieldsValue)
+        _ = stringBuilder.AppendFormatIf(!string.IsNullOrEmpty(fieldsValue), System.Globalization.CultureInfo.InvariantCulture, " --fields={0}", fieldsValue)
             .AppendFormatIf(!string.Equals(sortBy, DefaultSortBy, StringComparison.Ordinal), System.Globalization.CultureInfo.InvariantCulture, " --sort-by={0}", sortBy)
             .AppendIf(ascending, " --ascending")
             .AppendFormatIf(searchPattern is not null, System.Globalization.CultureInfo.InvariantCulture, " --search={0}", QuoteIfRequired(searchPattern))
@@ -111,7 +113,7 @@ public class CalibreDb
             {
                 if (Preprocess(data) is string value)
                 {
-                    stringBuilder.Append(value);
+                    _ = stringBuilder.Append(value);
                 }
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -324,19 +326,19 @@ public class CalibreDb
             var fieldString = field
                 .Select(value => value?.ToString())
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
-                    .Select(value => value?.Replace("\"", "\"\"\"", StringComparison.Ordinal))
+                .Select(value => value?.Replace("\"", "\"\"\"", StringComparison.Ordinal))
 #else
-                    .Select(value => value?.Replace("\"", "\"\"\""))
+                .Select(value => value?.Replace("\"", "\"\"\""))
 #endif
-                    .Select(QuoteIfRequired);
+                .Select(QuoteIfRequired);
             stringBuilder
                 .Append(" --field ")
                 .Append(field.Key)
                 .Append(':')
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
-                    .AppendJoin(",", fieldString);
+                .AppendJoin(",", fieldString);
 #else
-                    .Append(string.Join(",", fieldString));
+                .Append(string.Join(",", fieldString));
 #endif
         }
 
@@ -379,13 +381,7 @@ public class CalibreDb
         }
 
         memoryStream.Position = 0;
-        var xmlSerializer = new System.Xml.Serialization.XmlSerializer(typeof(Opf.Package));
-        if (xmlSerializer.Deserialize(memoryStream) is Opf.Package package)
-        {
-            return package;
-        }
-
-        throw new InvalidOperationException("Failed to deserialize OPF payload");
+        return this.xmlSerializer.Deserialize(memoryStream) as Opf.Package ?? throw new InvalidOperationException("Failed to deserialize OPF payload");
     }
 
     /// <summary>
@@ -395,12 +391,6 @@ public class CalibreDb
     /// <returns>The categories.</returns>
     public async IAsyncEnumerable<Category> ShowCategoriesAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var stringBuilder = new StringBuilder();
-        stringBuilder
-            .Append(" --csv");
-        var command = stringBuilder.ToString();
-        stringBuilder.Length = 0;
-
         var hasHeader = false;
         var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var end = false;
@@ -408,7 +398,7 @@ public class CalibreDb
 
         _ = this.ExecuteCalibreDbAsync(
             "list_categories",
-            command,
+            "--csv",
             data =>
             {
                 if (Preprocess(data) is string value)
@@ -433,7 +423,7 @@ public class CalibreDb
             },
             cancellationToken: cancellationToken);
 
-        string?[]? values = default;
+        string[]? values = default;
         do
         {
             await resetEvent.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -444,7 +434,7 @@ public class CalibreDb
 
             while (lines.TryDequeue(out var line))
             {
-                string? lastItem = default;
+                string lastItem;
                 if (values is null)
                 {
                     values = ProcessStrings(line, ',', combining: false);
@@ -462,21 +452,16 @@ public class CalibreDb
 
                 CleanValues(values);
 
-                if (Enum.TryParse<CategoryType>(values[0]?.Trim('#'), ignoreCase: true, out var categoryType)
+                yield return Enum.TryParse<CategoryType>(values[0]?.Trim('#'), ignoreCase: true, out var categoryType)
                     && values[1] is string tagName
                     && int.TryParse(values[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count)
-                    && float.TryParse(values[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rating))
-                {
-                    yield return new Category(
+                    && float.TryParse(values[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rating)
+                    ? new Category(
                         categoryType,
                         tagName,
                         count,
-                        rating);
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Failed to extract category from {string.Join("|", values)}");
-                }
+                        rating)
+                    : throw new InvalidOperationException($"Failed to extract category from {string.Join("|", values)}");
 
                 values = default;
             }
@@ -485,14 +470,123 @@ public class CalibreDb
         }
         while (!end);
 
-        static string? GetLastItem(string?[] items)
+        static string GetLastItem(string[] items)
         {
             return
 #if NETSTANDARD2_0
-                    items[items.Length - 1];
+                items[items.Length - 1];
 #else
-                    items[^1];
+                items[^1];
 #endif
+        }
+
+        static bool CheckStartQuote(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+
+            // check the number of quotes at the start
+            var end = 0;
+            for (; end < value.Length; end++)
+            {
+                if (value[end] != QuoteChar)
+                {
+                    break;
+                }
+            }
+
+            return end % 2 != 0;
+        }
+
+        static bool CheckEndQuote(string value)
+        {
+            if (value is null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            System.Diagnostics.Contracts.Contract.EndContractBlock();
+
+            // check the number of quotes at the end
+            var start = 0;
+            for (; start < value.Length; start++)
+            {
+                if (value[value.Length - 1 - start] != QuoteChar)
+                {
+                    break;
+                }
+            }
+
+            return start % 2 != 0;
+        }
+
+        static string UpdateValues(ref string[] values, string lastItem, string[] split)
+        {
+#if NETSTANDARD2_0
+            values[values.Length - 1]
+#else
+            values[^1]
+#endif
+                = lastItem + Environment.NewLine + split[0];
+
+            // resize the array
+            if (split.Length > 1)
+            {
+                var index = values.Length;
+                Array.Resize(ref values, values.Length + split.Length - 1);
+                Array.Copy(split, 1, values, index, split.Length - 1);
+            }
+
+#if NETSTANDARD2_0
+            return values[values.Length - 1];
+#else
+            return values[^1];
+#endif
+        }
+
+        static void CleanValues(string?[] values)
+        {
+            // clean up any extraneous quotes
+            for (var i = 0; i < values.Length; i++)
+            {
+                // we can assume that if the string starts/ends with a quote, then these are single quotes
+                // as if there are any escaped quotes in the string, then it must be quoted.
+                var value = values[i];
+                if (value is null || string.IsNullOrEmpty(value))
+                {
+                    // set this to null, as it was an empty, unquoted string.
+                    values[i] = null;
+                    continue;
+                }
+
+                var start = 0;
+                if (value.Length > 0 && value[start] == QuoteChar)
+                {
+                    start++;
+                }
+
+                var end = value.Length - 1;
+                if (value.Length > 0 && value[end] == QuoteChar)
+                {
+                    end--;
+                }
+
+                var length = end - start + 1;
+                if (length != value.Length)
+                {
+                    value = length <= 0 ? string.Empty : value.Substring(start, length);
+                }
+
+#if NETSTANDARD2_0
+                values[i] = value.Replace(EscapedQuoteString, QuoteString);
+#else
+                values[i] = value.Replace(EscapedQuoteString, QuoteString, StringComparison.Ordinal);
+#endif
+            }
         }
     }
 
@@ -524,13 +618,13 @@ public class CalibreDb
 
     private static string? QuoteIfRequired(string? value) => value is not null
 #if NETSTANDARD2_0
-            && value.Contains(' ')
+        && value.Contains(' ')
 #else
-            && value.Contains(' ', StringComparison.Ordinal)
+        && value.Contains(' ', StringComparison.Ordinal)
 #endif
-            ? string.Concat("\"", value, "\"") : value;
+        ? string.Concat("\"", value, "\"") : value;
 
-    private static string?[] ProcessStrings(string value, char delimiter, bool combining)
+    private static string[] ProcessStrings(string value, char delimiter, bool combining)
     {
         if (value is null)
         {
@@ -570,9 +664,9 @@ public class CalibreDb
 
         returnArray[returnIndex] =
 #if NETSTANDARD2_0
-                value.Substring(lastIndex, value.Length - lastIndex);
+            value.Substring(lastIndex, value.Length - lastIndex);
 #else
-                value[lastIndex..];
+            value[lastIndex..];
 #endif
         returnIndex++;
 
@@ -583,115 +677,6 @@ public class CalibreDb
         }
 
         return returnArray;
-    }
-
-    private static bool CheckStartQuote(string? value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        System.Diagnostics.Contracts.Contract.EndContractBlock();
-
-        // check the number of quotes at the start
-        var end = 0;
-        for (; end < value.Length; end++)
-        {
-            if (value[end] != QuoteChar)
-            {
-                break;
-            }
-        }
-
-        return end % 2 != 0;
-    }
-
-    private static bool CheckEndQuote(string? value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        System.Diagnostics.Contracts.Contract.EndContractBlock();
-
-        // check the number of quotes at the end
-        var start = 0;
-        for (; start < value.Length; start++)
-        {
-            if (value[value.Length - 1 - start] != QuoteChar)
-            {
-                break;
-            }
-        }
-
-        return start % 2 != 0;
-    }
-
-    private static void CleanValues(string?[] values)
-    {
-        // clean up any extraneous quotes
-        for (var i = 0; i < values.Length; i++)
-        {
-            // we can assume that if the string starts/ends with a quote, then these are single quotes
-            // as if there are any escaped quotes in the string, then it must be quoted.
-            var value = values[i];
-            if (value is null || string.IsNullOrEmpty(value))
-            {
-                // set this to null, as it was an empty, unquoted string.
-                values[i] = null;
-                continue;
-            }
-
-            var start = 0;
-            if (value.Length > 0 && value[start] == QuoteChar)
-            {
-                start++;
-            }
-
-            var end = value.Length - 1;
-            if (value.Length > 0 && value[end] == QuoteChar)
-            {
-                end--;
-            }
-
-            var length = end - start + 1;
-            if (length != value.Length)
-            {
-                value = length <= 0 ? string.Empty : value.Substring(start, length);
-            }
-
-#if NETSTANDARD2_0
-            values[i] = value.Replace(EscapedQuoteString, QuoteString);
-#else
-            values[i] = value.Replace(EscapedQuoteString, QuoteString, StringComparison.Ordinal);
-#endif
-        }
-    }
-
-    private static string? UpdateValues(ref string?[] values, string? lastItem, string?[] split)
-    {
-#if NETSTANDARD2_0
-        values[values.Length - 1]
-#else
-        values[^1]
-#endif
-                = lastItem + Environment.NewLine + split[0];
-
-        // resize the array
-        if (split.Length > 1)
-        {
-            var index = values.Length;
-            Array.Resize(ref values, values.Length + split.Length - 1);
-            Array.Copy(split, 1, values, index, split.Length - 1);
-        }
-
-#if NETSTANDARD2_0
-        return values[values.Length - 1];
-#else
-        return values[^1];
-#endif
     }
 
     private static string Serialize(StandardField field)
@@ -765,12 +750,7 @@ public class CalibreDb
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return Enumerable.Empty<int>();
-        }
-
-        return bookIds;
+        return cancellationToken.IsCancellationRequested ? Enumerable.Empty<int>() : bookIds;
     }
 
     private async Task ExecuteCalibreDbAsync(string command, string arguments, Action<string>? outputDataReceived = default, Action? complete = default, CancellationToken cancellationToken = default)

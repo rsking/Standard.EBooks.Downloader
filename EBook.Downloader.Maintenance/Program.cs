@@ -104,14 +104,7 @@ static async Task Tags(
                     var currentWord = new System.Text.StringBuilder();
                     foreach (var letter in word)
                     {
-                        if (count == 0)
-                        {
-                            currentWord.Append(textInfo.ToUpper(letter));
-                        }
-                        else
-                        {
-                            currentWord.Append(letter);
-                        }
+                        _ = count == 0 ? currentWord.Append(textInfo.ToUpper(letter)) : currentWord.Append(letter);
 
                         count++;
                     }
@@ -124,23 +117,16 @@ static async Task Tags(
 
     static (string Name, string? Character) Split(string value)
     {
-        var index = value.IndexOf('(', StringComparison.Ordinal);
-        if (index == -1)
+        return value.IndexOf('(', StringComparison.Ordinal) switch
         {
-            return (value, default);
-        }
-
-        return (value[..(index - 1)], value[index..]);
+            -1 => (value, default),
+            (int index) => (value[..(index - 1)], value[index..]),
+        };
     }
 
     static string Join(string name, string? character)
     {
-        if (character is null)
-        {
-            return name;
-        }
-
-        return $"{name} {character}";
+        return character is null ? name : $"{name} {character}";
     }
 }
 
