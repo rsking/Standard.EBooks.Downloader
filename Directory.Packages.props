@@ -5,13 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="AngleSharp" Version="0.17.1" />
+    <PackageVersion Include="AngleSharp" Version="1.0.1" />
     <PackageVersion Include="ChronicNetCore" Version="1.0.0" />
     <PackageVersion Include="HtmlAgilityPack" Version="1.11.46" />
     <PackageVersion Include="IsExternalInit" Version="1.0.3" />
     <PackageVersion Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00016" />
     <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="7.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="7.0.1" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="7.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="7.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="7.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="2.0.0" />
@@ -26,9 +26,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <GlobalPackageReference Include="Meziantou.Analyzer" Version="1.0.757" />
+    <GlobalPackageReference Include="Meziantou.Analyzer" Version="2.0.14" />
     <GlobalPackageReference Include="Roslynator.Analyzers" Version="4.2.0" />
-    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="8.51.0.59060" />
+    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="8.52.0.60960" />
     <GlobalPackageReference Include="StyleCop.Analyzers.Unstable" Version="1.2.0.435" />
   </ItemGroup>
 
