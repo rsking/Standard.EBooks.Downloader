@@ -32,15 +32,12 @@ var builder = new CommandLineBuilder(rootCommand)
         {
             _ = configureHost
                 .UseSerilog((_, loggerConfiguration) => loggerConfiguration
-                    .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.CurrentCulture, outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}")
+                    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId:00}> {Message:lj}{NewLine}{Exception}", formatProvider: System.Globalization.CultureInfo.CurrentCulture)
                     .Filter.ByExcluding(Serilog.Filters.Matching.FromSource(typeof(HttpClient).FullName ?? string.Empty))
                     .Enrich.WithThreadId());
             _ = configureHost
-                .ConfigureServices((_, services) =>
-                {
-                    _ = (HostBuilderContext)services.AddHttpClient(string.Empty);
-                    _ = (HostBuilderContext)services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
-                });
+                .ConfigureServices(services => services.AddHttpClient(string.Empty)
+                    .Services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true));
         });
 
 return await builder

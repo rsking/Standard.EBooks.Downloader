@@ -366,7 +366,7 @@ static async Task Metadata(
         var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
         if (File.Exists(filePath))
         {
-            await calibreLibrary.UpdateAsync(book, EpubInfo.Parse(filePath, parseDescription: true), forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            await calibreLibrary.UpdateAsync(book, await EpubInfo.ParseAsync(filePath, parseDescription: true, description => Task.FromResult<string?>(description), async (longDescription) => await UpdateLongDescriptionAsync(longDescription, calibreLibrary, programLogger, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false), forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
 }
@@ -522,7 +522,7 @@ static async Task DownloadIfRequired(
         return;
     }
 
-    var epubInfo = EpubInfo.Parse(path, !IsKePub(extension));
+    var epubInfo = await EpubInfo.ParseAsync(path, !IsKePub(extension), description => Task.FromResult<string?>(description), async (longDescription) => await UpdateLongDescriptionAsync(longDescription, calibreLibrary, programLogger, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeries, forcedSets, cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
@@ -555,6 +555,81 @@ static async Task DownloadIfRequired(
             return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
         }
     }
+}
+
+async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+{
+    var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)/(?<book>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+    var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+    var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+
+    // update the description with internal links
+    var document = await Parser.ParseDocumentAsync(longDescription.OuterXml, cancellationToken).ConfigureAwait(false);
+
+    var updated = false;
+    foreach (var anchor in document.GetElementsByTagName("a").OfType<AngleSharp.Html.Dom.IHtmlAnchorElement>())
+    {
+        if (anchor.Href is string uri)
+        {
+            if (bookRegex.IsMatch(uri))
+            {
+                logger.LogDebug("Looking up link to {Uri}", uri);
+                if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
+                {
+                    anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
+                    updated = true;
+                }
+            }
+            else if (authorRegex.IsMatch(uri))
+            {
+                logger.LogDebug("Found author URI");
+
+                // set this to seach for the author
+                var match = authorRegex.Match(uri);
+                var author = match.Groups["author"];
+                var search = $"author:\"={author.Value.Replace('-', ' ')}\"";
+                anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                updated = true;
+            }
+            else if (collectionsRegex.IsMatch(uri))
+            {
+                logger.LogDebug("Found collections URI");
+
+                var match = collectionsRegex.Match(uri);
+                var collection = match.Groups["collection"];
+                var search = $"series:\"={collection.Value.Replace('-', ' ')}\"";
+                anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                updated = true;
+            }
+            else
+            {
+                logger.LogWarning("Unknown URI format: {Uri} - {Anchor}", uri, anchor.OuterHtml);
+            }
+
+            static string ConvertStringToHex(string input, System.Text.Encoding encoding)
+            {
+                var stringBytes = encoding.GetBytes(input);
+                var characters = new char[stringBytes.Length * 2];
+                foreach (var (i, hex) in stringBytes.Select((i, b) => (i, Hex: b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture))))
+                {
+                    var index = i * 2;
+                    characters[index] = hex[0];
+                    characters[index + 1] = hex[1];
+                }
+
+                return new string(characters);
+            }
+        }
+    }
+
+    if (updated && document.ToString() is string stringDescription)
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml(stringDescription);
+        return doc.DocumentElement!;
+    }
+
+    return longDescription;
 }
 
 static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileInfo? input)
@@ -599,4 +674,16 @@ static async Task<DateTime> GetLastWriteTime(
 static bool IsKePub(string extension)
 {
     return string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
+}
+
+/// <content>
+/// Members for the program.
+/// </content>
+internal sealed partial class Program
+{
+    private static readonly AngleSharp.Html.Parser.HtmlParser Parser = new();
+
+    private Program()
+    {
+    }
 }
