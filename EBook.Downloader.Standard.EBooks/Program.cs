@@ -120,7 +120,7 @@ var builder = new CommandLineBuilder(rootCommand)
                 .ConfigureServices((__, services) =>
                 {
                     _ = services
-                        .AddSqliteCache(options => options.CachePath = "C:\\Temp\\http.cache.sqlite");
+                        .AddSqliteCache(options => options.CachePath = Path.Combine(Path.GetTempPath(), "http.cache.sqlite"));
                     _ = services
                         .AddHttpClient(string.Empty)
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
