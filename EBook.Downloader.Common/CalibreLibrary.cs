@@ -616,10 +616,21 @@ public class CalibreLibrary : IDisposable
                     else if (authorRegex.IsMatch(uri))
                     {
                         this.logger.LogDebug("Found author URI");
+
+                        // set this to seach for the author
+                        var match = authorRegex.Match(uri);
+                        var author = match.Groups["author"];
+                        var search = $"author:\"={author.Value.Replace('-', ' ')}\"";
+                        anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
                     }
                     else if (collectionsRegex.IsMatch(uri))
                     {
                         this.logger.LogDebug("Found collections URI");
+
+                        var match = collectionsRegex.Match(uri);
+                        var collection = match.Groups["collection"];
+                        var search = $"series:\"={collection.Value.Replace('-', ' ')}\"";
+                        anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
                     }
                     else
                     {
@@ -629,6 +640,20 @@ public class CalibreLibrary : IDisposable
             }
 
             longDescription = document.Minify();
+
+            static string ConvertStringToHex(string input, System.Text.Encoding encoding)
+            {
+                var stringBytes = encoding.GetBytes(input);
+                var characters = new char[stringBytes.Length * 2];
+                foreach (var (i, hex) in stringBytes.Select((i, b) => (i, Hex: b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture))))
+                {
+                    var index = i * 2;
+                    characters[index] = hex[0];
+                    characters[index + 1] = hex[1];
+                }
+
+                return new string(characters);
+            }
         }
 
         return DoUpdateDescription(longDescription, currentLongDescription);
