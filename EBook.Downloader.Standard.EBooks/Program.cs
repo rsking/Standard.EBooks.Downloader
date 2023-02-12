@@ -267,7 +267,7 @@ static async Task Download(
                     // this is below our retry count
                 }
 
-                System.Threading.Thread.Sleep(SentinelRetryWait);
+                Thread.Sleep(SentinelRetryWait);
             }
         }
     }

@@ -43,7 +43,7 @@ var builder = new CommandLineBuilder(rootCommand)
 return await builder
     .CancelOnProcessTermination()
     .Build()
-    .InvokeAsync(args.Select(System.Environment.ExpandEnvironmentVariables).ToArray())
+    .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
 
 static async Task Process(
