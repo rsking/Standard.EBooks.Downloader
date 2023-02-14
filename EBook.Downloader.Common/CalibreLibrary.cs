@@ -47,12 +47,20 @@ public class CalibreLibrary : IDisposable
     /// <param name="logger">The logger.</param>
     /// <param name="calibrePath">The path to the calibre binaries.</param>
     public CalibreLibrary(string path, bool useContentServer, ILogger logger, string calibrePath = Calibre.CalibreDb.DefaultCalibrePath)
+        : this(new Calibre.CalibreDb(path, useContentServer, logger, calibrePath), logger)
     {
-        this.Path = path;
-        this.logger = logger;
-        this.calibreDb = new Calibre.CalibreDb(path, useContentServer, logger, calibrePath);
+    }
 
-        var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(path, "metadata.db"), Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite };
+    /// <summary>
+    /// Initialises a new instance of the <see cref="CalibreLibrary" /> class.
+    /// </summary>
+    /// <param name="calibreDb">The calibre DB instance.</param>
+    /// <param name="logger">The logger.</param>
+    public CalibreLibrary(Calibre.CalibreDb calibreDb, ILogger logger)
+    {
+        this.logger = logger;
+        this.calibreDb = calibreDb;
+        var connectionStringBuilder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = System.IO.Path.Combine(this.Path, "metadata.db"), Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite };
         this.connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionStringBuilder.ConnectionString);
         this.connection.Open();
 
@@ -84,7 +92,7 @@ public class CalibreLibrary : IDisposable
     /// <summary>
     /// Gets the path.
     /// </summary>
-    public string Path { get; }
+    public string Path => this.calibreDb.Path;
 
     /// <summary>
     /// Gets the book for a specified identifier and extension.
@@ -127,15 +135,11 @@ public class CalibreLibrary : IDisposable
     /// </summary>
     /// <param name="info">The EPUB info.</param>
     /// <param name="maxTimeOffset">The maximum time offset.</param>
-    /// <param name="forcedSeries">The forced series.</param>
-    /// <param name="forcedSets">The forced sets.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns><see langword="true"/> if the EPUB has been added/updated; otherwise <see langword="false" />.</returns>
     public Task<bool> AddOrUpdateAsync(
         EpubInfo info,
         int maxTimeOffset,
-        IEnumerable<System.Text.RegularExpressions.Regex>? forcedSeries = default,
-        IEnumerable<System.Text.RegularExpressions.Regex>? forcedSets = default,
         CancellationToken cancellationToken = default)
     {
         if (info is null)
@@ -170,7 +174,7 @@ public class CalibreLibrary : IDisposable
                 if (book?.Path is not null && book.Name is not null)
                 {
                     UpdateLastWriteTime(book.Path, book.Name, info);
-                    await UpdateMetadata(book, forcedSeries ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>(), forcedSets ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>()).ConfigureAwait(false);
+                    await UpdateMetadata(book).ConfigureAwait(false);
                 }
 
                 return true;
@@ -198,7 +202,7 @@ public class CalibreLibrary : IDisposable
                     _ = info.Path.CopyTo(fullPath, overwrite: true);
                 }
 
-                await UpdateMetadata(book, forcedSeries ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>(), forcedSets ?? Enumerable.Empty<System.Text.RegularExpressions.Regex>()).ConfigureAwait(false);
+                await UpdateMetadata(book).ConfigureAwait(false);
 
                 return true;
             }
@@ -281,9 +285,9 @@ public class CalibreLibrary : IDisposable
                 }
             }
 
-            async Task UpdateMetadata(CalibreBook book, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets)
+            async Task UpdateMetadata(CalibreBook book)
             {
-                await this.UpdateAsync(book, info, forcedSeries, forcedSets, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                await this.UpdateAsync(book, info, maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
 
             void UpdateLastWriteTime(string path, string name, EpubInfo info)
@@ -302,12 +306,10 @@ public class CalibreLibrary : IDisposable
     /// </summary>
     /// <param name="book">The calibre book.</param>
     /// <param name="epub">The EPUB info.</param>
-    /// <param name="forcedSeries">The collections that should be forced to a series.</param>
-    /// <param name="forcedSets">The collections that should be forced to a set.</param>
     /// <param name="maxTimeOffset">The maximum time offset.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task associated with this function.</returns>
-    public Task UpdateAsync(CalibreBook book, EpubInfo epub, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets, int maxTimeOffset, CancellationToken cancellationToken = default)
+    public Task UpdateAsync(CalibreBook book, EpubInfo epub, int maxTimeOffset, CancellationToken cancellationToken = default)
     {
         if (book is null)
         {
@@ -316,14 +318,14 @@ public class CalibreLibrary : IDisposable
 
         System.Diagnostics.Contracts.Contract.EndContractBlock();
 
-        return UpdateInternalAsync(book, epub, forcedSeries, forcedSets, maxTimeOffset, cancellationToken);
+        return UpdateInternalAsync(book, epub, maxTimeOffset, cancellationToken);
 
-        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets, int maxTimeOffset, CancellationToken cancellationToken = default)
+        async Task UpdateInternalAsync(CalibreBook book, EpubInfo epub, int maxTimeOffset, CancellationToken cancellationToken = default)
         {
             var series = epub.Collections
-                .FirstOrDefault(collection => collection.IsSeries(forcedSeries, forcedSets));
+                .FirstOrDefault(collection => collection.Type == EpubCollectionType.Series);
             var sets = epub.Collections
-                .Where(collection => collection.IsSet(forcedSeries, forcedSets))
+                .Where(collection => collection.Type == EpubCollectionType.Set)
                 .Select(collection => collection.Name);
 
             (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
@@ -377,7 +379,7 @@ public class CalibreLibrary : IDisposable
     /// Gets the book by the identifier.
     /// </summary>
     /// <param name="identifier">The identifier.</param>
-    /// <param name="cancellationToken">The cancellation token,</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The book if found; otherwise <see langword="null"/>.</returns>
     public Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 

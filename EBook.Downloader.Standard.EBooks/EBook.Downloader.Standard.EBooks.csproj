@@ -22,6 +22,7 @@
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Enrichers.Thread" />
     <PackageReference Include="System.CommandLine.Hosting" />
+    <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="System.ServiceModel.Syndication" />
   </ItemGroup>
 

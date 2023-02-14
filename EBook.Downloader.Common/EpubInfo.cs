@@ -14,57 +14,55 @@ public record class EpubInfo
     /// <summary>
     /// Gets the authors.
     /// </summary>
-    public IEnumerable<string> Authors { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Authors { get; init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the title.
     /// </summary>
-    public string Title { get; private init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
 
     /// <summary>
     /// Gets the publishers.
     /// </summary>
-    public IEnumerable<string> Publishers { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Publishers { get; init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the tags.
     /// </summary>
-    public IEnumerable<string> Tags { get; private init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Tags { get; init; } = Enumerable.Empty<string>();
 
     /// <summary>
     /// Gets the identifiers.
     /// </summary>
-    public IReadOnlyDictionary<string, string> Identifiers { get; private init; } = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty;
+    public IReadOnlyDictionary<string, string> Identifiers { get; init; } = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty;
 
     /// <summary>
     /// Gets the description.
     /// </summary>
-    public string? Description { get; private init; }
+    public string? Description { get; init; }
 
     /// <summary>
     /// Gets the long description.
     /// </summary>
-    public System.Xml.XmlElement? LongDescription { get; private init; }
+    public System.Xml.XmlElement? LongDescription { get; init; }
 
     /// <summary>
     /// Gets the collections.
     /// </summary>
-    public IEnumerable<EpubCollection> Collections { get; private init; } = Enumerable.Empty<EpubCollection>();
+    public IEnumerable<EpubCollection> Collections { get; init; } = Enumerable.Empty<EpubCollection>();
 
     /// <summary>
     /// Gets the path.
     /// </summary>
-    public FileInfo Path { get; private init; } = new(Environment.SystemDirectory);
+    public FileInfo Path { get; init; } = new(Environment.SystemDirectory);
 
     /// <summary>
     /// Parses EPUB information from a path.
     /// </summary>
     /// <param name="path">The path.</param>
     /// <param name="parseDescription">Set to <see langword="true" /> to parse the description.</param>
-    /// <param name="descrptionParser">The description parser.</param>
-    /// <param name="longDescriptionParser">The long description parser.</param>
     /// <returns>The EPUB information.</returns>
-    public static async Task<EpubInfo> ParseAsync(string path, bool parseDescription, Func<string, Task<string?>> descrptionParser, Func<System.Xml.XmlElement, Task<System.Xml.XmlElement?>> longDescriptionParser)
+    public static EpubInfo Parse(string path, bool parseDescription)
     {
         var document = new System.Xml.XmlDocument();
         document.LoadXml(GetContents(path));
@@ -78,7 +76,7 @@ public record class EpubInfo
         var identifiers = GetIdentifiers(document, manager)
             .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         (var description, var longDescription) = parseDescription
-            ? await ParseDescriptionAsync(GetDescription(document, manager), descrptionParser, longDescriptionParser).ConfigureAwait(false)
+            ? GetDescription(document, manager)
             : default;
         var collections = GetCollections(document, manager);
 
@@ -95,184 +93,120 @@ public record class EpubInfo
             Path = new FileInfo(path),
         };
 
-        async static Task<(string? Description, System.Xml.XmlElement? LongDescription)> ParseDescriptionAsync((string? Description, System.Xml.XmlElement? LongDescription) descriptions, Func<string, Task<string?>> descrptionParser, Func<System.Xml.XmlElement, Task<System.Xml.XmlElement?>> longDescriptionParser)
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S1075:URIs should not be hardcoded", Justification = "These are XML namespaces")]
+        static System.Xml.XmlNamespaceManager CreateNamespaceManager(System.Xml.XmlDocument document)
         {
-            var description = descriptions.Description is string d
-                ? await descrptionParser(d).ConfigureAwait(false)
-                : default;
-            var longDescription = descriptions.LongDescription is System.Xml.XmlElement ld
-                ? await longDescriptionParser(ld).ConfigureAwait(false)
-                : default;
+            var manager = new System.Xml.XmlNamespaceManager(document.NameTable);
+            manager.AddNamespace(string.Empty, "http://www.idpf.org/2007/opf");
+            manager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
+            manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
+            return manager;
+        }
+
+        static IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        {
+            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
+            if (publisher is not null)
+            {
+                yield return publisher.InnerText;
+                yield break;
+            }
+
+            for (var index = 1; (publisher = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']"), manager)) is not null; index++)
+            {
+                yield return publisher.InnerText;
+            }
+        }
+
+        static IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        {
+            var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
+            if (author is not null)
+            {
+                yield return author.InnerText;
+                yield break;
+            }
+
+            for (var index = 1; (author = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:creator[@id='author-{index}']"), manager)) is not null; index++)
+            {
+                yield return author.InnerText;
+            }
+        }
+
+        static IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        {
+            var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
+            if (collection is not null)
+            {
+                yield return collection.InnerText;
+                yield break;
+            }
+
+            for (var index = 1; (collection = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:subject[@id='subject-{index}']"), manager)) is not null; index++)
+            {
+                yield return collection.InnerText;
+            }
+        }
+
+        static IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        {
+            var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
+            if (identifier is null)
+            {
+                yield break;
+            }
+
+            var split = identifier.InnerText.Split(new[] { ':' }, 2);
+            yield return (split[0], split[1]);
+        }
+
+        static (string? Description, System.Xml.XmlElement? LongDescription) GetDescription(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
+        {
+            var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
+            System.Xml.XmlElement? longDescription = default;
+            if (document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager) is System.Xml.XmlNode node && node.InnerText is not null)
+            {
+                longDescription = document.CreateElement("div");
+                longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
+            }
 
             return (description, longDescription);
         }
-    }
 
-    /// <summary>
-    /// Parses EPUB information from a path.
-    /// </summary>
-    /// <param name="path">The path.</param>
-    /// <param name="parseDescription">Set to <see langword="true" /> to parse the description.</param>
-    /// <param name="descrptionParser">The description parser.</param>
-    /// <param name="longDescriptionParser">The long description parser.</param>
-    /// <returns>The EPUB information.</returns>
-    public static EpubInfo Parse(string path, bool parseDescription, Func<string, string?> descrptionParser, Func<System.Xml.XmlElement, System.Xml.XmlElement?> longDescriptionParser)
-    {
-        var document = new System.Xml.XmlDocument();
-        document.LoadXml(GetContents(path));
-
-        var manager = CreateNamespaceManager(document);
-
-        var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
-        var publishers = GetPublishers(document, manager);
-        var authors = GetAuthors(document, manager);
-        var tags = GetTags(document, manager);
-        var identifiers = GetIdentifiers(document, manager)
-            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
-        (var description, var longDescription) = parseDescription
-            ? ParseDescription(GetDescription(document, manager), descrptionParser, longDescriptionParser)
-            : default;
-        var collections = GetCollections(document, manager);
-
-        return new EpubInfo
+        static IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            Authors = authors.ToArray(),
-            Title = title,
-            Publishers = publishers.ToArray(),
-            Tags = tags.ToArray(),
-            Identifiers = identifiers,
-            Description = description,
-            LongDescription = longDescription,
-            Collections = collections,
-            Path = new FileInfo(path),
-        };
+            var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
+            if (nodes is null)
+            {
+                yield break;
+            }
 
-        static (string? Description, System.Xml.XmlElement? LongDescription) ParseDescription((string? Description, System.Xml.XmlElement? LongDescription) descriptions, Func<string, string?> descrptionParser, Func<System.Xml.XmlElement, System.Xml.XmlElement?> longDescriptionParser)
-        {
-            var description = descriptions.Description is string d
-                ? descrptionParser(d)
-                : default;
-            var longDescription = descriptions.LongDescription is System.Xml.XmlElement ld
-                ? longDescriptionParser(ld)
-                : default;
+            foreach (var node in nodes.OfType<System.Xml.XmlNode>())
+            {
+                var id = node.Attributes["id"].Value;
+                var name = node.InnerText;
 
-            return (description, longDescription);
-        }
-    }
+                var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is System.Xml.XmlNode collectionTypeNode && collectionTypeNode.InnerText is not null
+                    ? (EpubCollectionType)Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
+                    : EpubCollectionType.None;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S1075:URIs should not be hardcoded", Justification = "These are XML namespaces")]
-    private static System.Xml.XmlNamespaceManager CreateNamespaceManager(System.Xml.XmlDocument document)
-    {
-        var manager = new System.Xml.XmlNamespaceManager(document.NameTable);
-        manager.AddNamespace(string.Empty, "http://www.idpf.org/2007/opf");
-        manager.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
-        manager.AddNamespace("x", document.DocumentElement.NamespaceURI);
-        return manager;
-    }
+                var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is System.Xml.XmlNode groupPositionNode && groupPositionNode.InnerText is not null
+                    ? int.Parse(groupPositionNode.InnerText, System.Globalization.CultureInfo.InvariantCulture)
+                    : 0;
 
-    private static IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
-        if (publisher is not null)
-        {
-            yield return publisher.InnerText;
-            yield break;
+                yield return new EpubCollection(id, name, collectionType, groupPosition);
+            }
         }
 
-        for (var index = 1; (publisher = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:publisher[@id='publisher-{index}']"), manager)) is not null; index++)
+        static string GetContents(string path)
         {
-            yield return publisher.InnerText;
+            using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+            var content = zip.GetEntry("epub/content.opf");
+
+            using var stream = content.Open();
+            using var reader = new StreamReader(stream);
+
+            return reader.ReadToEnd();
         }
-    }
-
-    private static IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
-        if (author is not null)
-        {
-            yield return author.InnerText;
-            yield break;
-        }
-
-        for (var index = 1; (author = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:creator[@id='author-{index}']"), manager)) is not null; index++)
-        {
-            yield return author.InnerText;
-        }
-    }
-
-    private static IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
-        if (collection is not null)
-        {
-            yield return collection.InnerText;
-            yield break;
-        }
-
-        for (var index = 1; (collection = document.SelectSingleNode(FormattableString.Invariant($"/x:package/x:metadata/dc:subject[@id='subject-{index}']"), manager)) is not null; index++)
-        {
-            yield return collection.InnerText;
-        }
-    }
-
-    private static IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
-        if (identifier is null)
-        {
-            yield break;
-        }
-
-        var split = identifier.InnerText.Split(new[] { ':' }, 2);
-        yield return (split[0], split[1]);
-    }
-
-    private static (string? Description, System.Xml.XmlElement? LongDescription) GetDescription(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
-        System.Xml.XmlElement? longDescription = default;
-        if (document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager) is System.Xml.XmlNode node && node.InnerText is not null)
-        {
-            longDescription = document.CreateElement("div");
-            longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
-        }
-
-        return (description, longDescription);
-    }
-
-    private static IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
-    {
-        var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
-        if (nodes is null)
-        {
-            yield break;
-        }
-
-        foreach (var node in nodes.OfType<System.Xml.XmlNode>())
-        {
-            var id = node.Attributes["id"].Value;
-            var name = node.InnerText;
-
-            var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is System.Xml.XmlNode collectionTypeNode && collectionTypeNode.InnerText is not null
-                ? (EpubCollectionType)Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
-                : EpubCollectionType.None;
-
-            var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is System.Xml.XmlNode groupPositionNode && groupPositionNode.InnerText is not null
-                ? int.Parse(groupPositionNode.InnerText, System.Globalization.CultureInfo.InvariantCulture)
-                : 0;
-
-            yield return new EpubCollection(id, name, collectionType, groupPosition);
-        }
-    }
-
-    private static string GetContents(string path)
-    {
-        using var zip = System.IO.Compression.ZipFile.OpenRead(path);
-        var content = zip.GetEntry("epub/content.opf");
-
-        using var stream = content.Open();
-        using var reader = new StreamReader(stream);
-
-        return reader.ReadToEnd();
     }
 }

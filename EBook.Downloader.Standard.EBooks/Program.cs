@@ -8,6 +8,7 @@ using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
+using AngleSharp;
 using EBook.Downloader.Common;
 using EBook.Downloader.Standard.EBooks;
 using Microsoft.Extensions.Caching.Distributed;
@@ -23,7 +24,9 @@ const int SentinelRetryWait = 100;
 
 const int MaxTimeOffset = 180;
 
+#pragma warning disable S1075 // URIs should not be hardcoded
 const string AtomUrl = "https://standardebooks.org/feeds/atom/new-releases";
+#pragma warning restore S1075 // URIs should not be hardcoded
 
 var maxTimeOffsetOption = new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset");
 var forcedSeriesOption = new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series");
@@ -120,7 +123,7 @@ var builder = new CommandLineBuilder(rootCommand)
                 .ConfigureServices((__, services) =>
                 {
                     _ = services
-                        .AddSqliteCache(options => options.CachePath = Path.Combine(Path.GetTempPath(), "http.cache.sqlite"));
+                        .AddSqliteCache(options => options.CachePath = Path.Combine(Path.GetTempPath(), "standard.ebook.cache.sqlite"));
                     _ = services
                         .AddHttpClient(string.Empty)
                         .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(30));
@@ -208,9 +211,14 @@ static async Task Download(
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
     var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
+    var calibreDb = new EBook.Downloader.Calibre.CalibreDb(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<EBook.Downloader.Calibre.CalibreDb>>());
+    var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    var series = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName).ToArray();
+    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
+
     var atomUri = new Uri(AtomUrl);
     var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri, cancellationToken).ConfigureAwait(false);
-    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+    using var calibreLibrary = new CalibreLibrary(calibreDb, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
         .Where(item => item.LastUpdatedTime > sentinelDateTime)
         .OrderBy(item => item.LastUpdatedTime)
@@ -246,6 +254,8 @@ static async Task Download(
                 extension,
                 forcedSeriesEnumerable,
                 forcedSetsEnumerable,
+                series,
+                sets,
                 maxTimeOffset,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -356,18 +366,131 @@ static async Task Metadata(
     CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
-    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+    var calibreDb = new EBook.Downloader.Calibre.CalibreDb(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<EBook.Downloader.Calibre.CalibreDb>>());
+    using var calibreLibrary = new CalibreLibrary(calibreDb, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
     var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
+    // get the current sets and series
+    var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogInformation("Processing book {Title}", book.Name);
         var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
         if (File.Exists(filePath))
         {
-            await calibreLibrary.UpdateAsync(book, await EpubInfo.ParseAsync(filePath, parseDescription: true, description => Task.FromResult<string?>(description), async (longDescription) => await UpdateLongDescriptionAsync(longDescription, calibreLibrary, programLogger, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false), forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            var epub = EpubInfo.Parse(filePath, parseDescription: true);
+            epub = await UpdateEpubInfoAsync(epub, calibreLibrary, forcedSeriesEnumerable, forcedSetsEnumerable, sets, programLogger, cancellationToken).ConfigureAwait(false);
+            await calibreLibrary.UpdateAsync(book, epub, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
+    }
+}
+
+static async Task<EpubInfo> UpdateEpubInfoAsync(
+    EpubInfo epub,
+    CalibreLibrary calibreLibrary,
+    IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
+    IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
+    IEnumerable<string> sets,
+    Microsoft.Extensions.Logging.ILogger logger,
+    CancellationToken cancellationToken)
+{
+    System.Xml.XmlElement? longDescription = default;
+    if (epub.LongDescription is not null)
+    {
+        longDescription = await UpdateLongDescriptionAsync(epub.LongDescription, calibreLibrary, sets, logger, cancellationToken).ConfigureAwait(false);
+    }
+
+    // update the sets and series
+    var collections = epub.Collections.Select(collection => collection switch
+    {
+        { Type: not EpubCollectionType.Series } c when c.IsSeries(forcedSeries, forcedSets) => c with { Type = EpubCollectionType.Series },
+        { Type: not EpubCollectionType.Set } c when c.IsSet(forcedSeries, forcedSets) => c with { Type = EpubCollectionType.Set },
+        _ => collection,
+    });
+
+    return epub with { LongDescription = longDescription, Collections = collections };
+
+    async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, IEnumerable<string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    {
+        var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)/(?<book>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+
+        // update the description with internal links
+        var document = await Parser.ParseDocumentAsync(longDescription.OuterXml, cancellationToken).ConfigureAwait(false);
+
+        var updated = false;
+        foreach (var anchor in document.GetElementsByTagName("a").OfType<AngleSharp.Html.Dom.IHtmlAnchorElement>())
+        {
+            if (anchor.Href is string uri)
+            {
+                if (bookRegex.IsMatch(uri))
+                {
+                    logger.LogDebug("Looking up link to {Uri}", uri);
+                    if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
+                    {
+                        anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
+                        updated = true;
+                    }
+                }
+                else if (authorRegex.IsMatch(uri))
+                {
+                    logger.LogDebug("Found author URI");
+
+                    // set this to seach for the author
+                    var match = authorRegex.Match(uri);
+                    var author = match.Groups["author"];
+                    var search = $"author:\"={author.Value.Replace('-', ' ')}\"";
+                    anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                    updated = true;
+                }
+                else if (collectionsRegex.IsMatch(uri))
+                {
+                    logger.LogDebug("Found collections URI");
+
+                    var match = collectionsRegex.Match(uri);
+                    var collection = match.Groups["collection"];
+
+                    var value = collection.Value.Replace('-', ' ');
+                    var type = sets.Contains(value, StringComparer.OrdinalIgnoreCase)
+                        ? "sets"
+                        : "series";
+
+                    var search = $"{type}:\"={value}\"";
+                    anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                    updated = true;
+                }
+                else
+                {
+                    logger.LogWarning("Unknown URI format: {Uri} - {Anchor}", uri, anchor.OuterHtml);
+                }
+
+                static string ConvertStringToHex(string input, System.Text.Encoding encoding)
+                {
+                    var stringBytes = encoding.GetBytes(input);
+                    var characters = new char[stringBytes.Length * 2];
+                    foreach (var (hex, i) in stringBytes.Select((b, i) => (Hex: b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture), i)))
+                    {
+                        var index = i * 2;
+                        characters[index] = hex[0];
+                        characters[index + 1] = hex[1];
+                    }
+
+                    return new string(characters);
+                }
+            }
+        }
+
+        if (updated && document.Body?.FirstChild?.ToHtml() is string html)
+        {
+            var doc = new System.Xml.XmlDocument();
+            doc.LoadXml(html);
+            return doc.DocumentElement!;
+        }
+
+        return longDescription;
     }
 }
 
@@ -382,11 +505,16 @@ static async Task Update(
     CancellationToken cancellationToken = default)
 {
     var programLogger = host.Services.GetRequiredService<ILogger<EpubInfo>>();
-    using var calibreLibrary = new CalibreLibrary(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
+    var calibreDb = new EBook.Downloader.Calibre.CalibreDb(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<EBook.Downloader.Calibre.CalibreDb>>());
+    using var calibreLibrary = new CalibreLibrary(calibreDb, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
     var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     var parser = new AngleSharp.Html.Parser.HtmlParser();
+
+    var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
+    var series = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName).ToArray();
 
     // get all the books from standard e-books
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
@@ -403,7 +531,7 @@ static async Task Update(
                 // get the extension
                 var extension = GetExtension(bookUri);
                 var last = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
-                await DownloadIfRequired(programLogger, calibreLibrary, httpClientFactory, bookUri, last, outputPath, extension, forcedSeriesEnumerable, forcedSetsEnumerable, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                await DownloadIfRequired(programLogger, calibreLibrary, httpClientFactory, bookUri, last, outputPath, extension, forcedSeriesEnumerable, forcedSetsEnumerable, series, sets,  maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -475,6 +603,8 @@ static async Task DownloadIfRequired(
     string extension,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
+    IEnumerable<string> series,
+    IEnumerable<string> sets,
     int maxTimeOffset,
     CancellationToken cancellationToken)
 {
@@ -522,8 +652,9 @@ static async Task DownloadIfRequired(
         return;
     }
 
-    var epubInfo = await EpubInfo.ParseAsync(path, !IsKePub(extension), description => Task.FromResult<string?>(description), async (longDescription) => await UpdateLongDescriptionAsync(longDescription, calibreLibrary, programLogger, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
-    if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, forcedSeries, forcedSets, cancellationToken).ConfigureAwait(false))
+    var epubInfo = EpubInfo.Parse(path, !IsKePub(extension));
+    epubInfo = await UpdateEpubInfoAsync(epubInfo, calibreLibrary, forcedSeries, forcedSets, sets, programLogger, cancellationToken).ConfigureAwait(false);
+    if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
         epubInfo.Path.Delete();
@@ -555,81 +686,6 @@ static async Task DownloadIfRequired(
             return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
         }
     }
-}
-
-async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
-{
-    var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)/(?<book>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-    var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-    var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-
-    // update the description with internal links
-    var document = await Parser.ParseDocumentAsync(longDescription.OuterXml, cancellationToken).ConfigureAwait(false);
-
-    var updated = false;
-    foreach (var anchor in document.GetElementsByTagName("a").OfType<AngleSharp.Html.Dom.IHtmlAnchorElement>())
-    {
-        if (anchor.Href is string uri)
-        {
-            if (bookRegex.IsMatch(uri))
-            {
-                logger.LogDebug("Looking up link to {Uri}", uri);
-                if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
-                {
-                    anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
-                    updated = true;
-                }
-            }
-            else if (authorRegex.IsMatch(uri))
-            {
-                logger.LogDebug("Found author URI");
-
-                // set this to seach for the author
-                var match = authorRegex.Match(uri);
-                var author = match.Groups["author"];
-                var search = $"author:\"={author.Value.Replace('-', ' ')}\"";
-                anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
-                updated = true;
-            }
-            else if (collectionsRegex.IsMatch(uri))
-            {
-                logger.LogDebug("Found collections URI");
-
-                var match = collectionsRegex.Match(uri);
-                var collection = match.Groups["collection"];
-                var search = $"series:\"={collection.Value.Replace('-', ' ')}\"";
-                anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
-                updated = true;
-            }
-            else
-            {
-                logger.LogWarning("Unknown URI format: {Uri} - {Anchor}", uri, anchor.OuterHtml);
-            }
-
-            static string ConvertStringToHex(string input, System.Text.Encoding encoding)
-            {
-                var stringBytes = encoding.GetBytes(input);
-                var characters = new char[stringBytes.Length * 2];
-                foreach (var (i, hex) in stringBytes.Select((i, b) => (i, Hex: b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture))))
-                {
-                    var index = i * 2;
-                    characters[index] = hex[0];
-                    characters[index + 1] = hex[1];
-                }
-
-                return new string(characters);
-            }
-        }
-    }
-
-    if (updated && document.ToString() is string stringDescription)
-    {
-        var doc = new System.Xml.XmlDocument();
-        doc.LoadXml(stringDescription);
-        return doc.DocumentElement!;
-    }
-
-    return longDescription;
 }
 
 static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileInfo? input)
