@@ -22,6 +22,11 @@ public record class EpubInfo
     public string Title { get; init; } = string.Empty;
 
     /// <summary>
+    /// Gets the date.
+    /// </summary>
+    public DateTimeOffset Date { get; init; }
+
+    /// <summary>
     /// Gets the publishers.
     /// </summary>
     public IEnumerable<string> Publishers { get; init; } = Enumerable.Empty<string>();
@@ -70,6 +75,7 @@ public record class EpubInfo
         var manager = CreateNamespaceManager(document);
 
         var title = document.SelectSingleNode("/x:package/x:metadata/dc:title[@id='title']", manager).InnerText;
+        var date = DateTimeOffset.Parse(document.SelectSingleNode("/x:package/x:metadata/dc:date", manager).InnerText, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None);
         var publishers = GetPublishers(document, manager);
         var authors = GetAuthors(document, manager);
         var tags = GetTags(document, manager);
@@ -84,6 +90,7 @@ public record class EpubInfo
         {
             Authors = authors.ToArray(),
             Title = title,
+            Date = date,
             Publishers = publishers.ToArray(),
             Tags = tags.ToArray(),
             Identifiers = identifiers,

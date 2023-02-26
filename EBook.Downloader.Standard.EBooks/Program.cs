@@ -374,6 +374,7 @@ static async Task Metadata(
     // get the current sets and series
     var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
     var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
+
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogInformation("Processing book {Title}", book.Name);
@@ -652,8 +653,7 @@ static async Task DownloadIfRequired(
         return;
     }
 
-    var epubInfo = EpubInfo.Parse(path, !IsKePub(extension));
-    epubInfo = await UpdateEpubInfoAsync(epubInfo, calibreLibrary, forcedSeries, forcedSets, sets, programLogger, cancellationToken).ConfigureAwait(false);
+    var epubInfo = await UpdateEpubInfoAsync(EpubInfo.Parse(path, !IsKePub(extension)), calibreLibrary, forcedSeries, forcedSets, sets, programLogger, cancellationToken).ConfigureAwait(false);
     if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));

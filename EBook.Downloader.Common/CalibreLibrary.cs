@@ -328,7 +328,7 @@ public class CalibreLibrary : IDisposable
                 .Where(collection => collection.Type == EpubCollectionType.Set)
                 .Select(collection => collection.Name);
 
-            (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+            (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags, var currentDate) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
 
             var longDescription = epub.LongDescription;
             var seriesName = series?.Name;
@@ -337,7 +337,8 @@ public class CalibreLibrary : IDisposable
             var fields = this.UpdateDescription(longDescription, currentLongDescription)
                 .Concat(this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex))
                 .Concat(this.UpdateSets(sets, currentSets))
-                .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags));
+                .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags))
+                .Concat(this.UpdateDate(epub.Date, currentDate));
             if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false)
 
                 // refresh the book with the last data
@@ -429,6 +430,8 @@ public class CalibreLibrary : IDisposable
     private static string? SanitiseHtml(string? html) => html is null ? null : Parser.ParseDocument(html).Body?.FirstChild?.Minify();
 
     private static string? GetCurrentLongDescription(System.Text.Json.JsonElement json) => SanitiseHtml(json.GetProperty("comments").GetString());
+
+    private static DateTimeOffset? GetCurrentDate(System.Text.Json.JsonElement json) => json.GetProperty("pubdate").GetDateTimeOffset();
 
     private static (string? Name, float Index) GetCurrentSeries(System.Text.Json.JsonElement json)
     {
@@ -612,6 +615,17 @@ public class CalibreLibrary : IDisposable
         yield return new FieldToUpdate("comments", longDescription);
     }
 
+    private IEnumerable<FieldToUpdate> UpdateDate(DateTimeOffset date, DateTimeOffset? currentDate)
+    {
+        if (currentDate.HasValue && date == currentDate)
+        {
+            yield break;
+        }
+
+        this.logger.LogInformation("Updating published date");
+        yield return new FieldToUpdate("pubdate", date);
+    }
+
     private IEnumerable<FieldToUpdate> UpdateSeries(string? name, float index, string? currentName, float currentIndex)
     {
         if (string.Equals(currentName, name, StringComparison.Ordinal) && (name is null || currentIndex == index))
@@ -701,10 +715,10 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags)> GetCurrentAsync(int id, CancellationToken cancellationToken)
+    private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags, DateTimeOffset? Date)> GetCurrentAsync(int id, CancellationToken cancellationToken)
     {
         var document = await this.calibreDb
-            .ListAsync(new[] { "comments", "tags", "series", "series_index", "*sets" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+            .ListAsync(new[] { "comments", "tags", "series", "series_index", "*sets", "pubdate" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (document is null)
@@ -718,7 +732,8 @@ public class CalibreLibrary : IDisposable
         (var seriesName, var seriesIndex) = GetCurrentSeries(json);
         var sets = GetCurrentSets(json);
         var tags = GetCurrentTags(json);
-        return (longDescription, seriesName, seriesIndex, sets, tags);
+        var date = GetCurrentDate(json);
+        return (longDescription, seriesName, seriesIndex, sets, tags, date);
     }
 
     private async Task<bool> SetMetadataAsync(int id, IEnumerable<FieldToUpdate> fields, CancellationToken cancellationToken = default)
