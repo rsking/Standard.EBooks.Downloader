@@ -328,13 +328,15 @@ public class CalibreLibrary : IDisposable
                 .Where(collection => collection.Type == EpubCollectionType.Set)
                 .Select(collection => collection.Name);
 
-            (var currentLongDescription, var currentSeriesName, var currentSeriesIndex, var currentSets, var currentTags, var currentDate) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
+            var (currentTitle, currentSubTitle, currentLongDescription, currentSeriesName, currentSeriesIndex, currentSets, currentTags, currentDate) = await this.GetCurrentAsync(book.Id, cancellationToken).ConfigureAwait(false);
 
             var longDescription = epub.LongDescription;
             var seriesName = series?.Name;
             var seriesIndex = series?.Position ?? 0;
 
-            var fields = this.UpdateDescription(longDescription, currentLongDescription)
+            var fields = this.UpdateTitle(epub.Title, currentTitle)
+                .Concat(this.UpdateSubTitle(epub.SubTitle, currentSubTitle))
+                .Concat(this.UpdateDescription(longDescription, currentLongDescription))
                 .Concat(this.UpdateSeries(seriesName, seriesIndex, currentSeriesName, currentSeriesIndex))
                 .Concat(this.UpdateSets(sets, currentSets))
                 .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags))
@@ -428,6 +430,10 @@ public class CalibreLibrary : IDisposable
     private static bool CheckIdentifier(System.Text.Json.JsonElement element, Calibre.Identifier identifier) => element.GetProperty("identifiers").GetProperty(identifier.Name).ToString()?.Equals(identifier.Value.ToString(), StringComparison.Ordinal) == true;
 
     private static string? SanitiseHtml(string? html) => html is null ? null : Parser.ParseDocument(html).Body?.FirstChild?.Minify();
+
+    private static string GetCurrentTitle(System.Text.Json.JsonElement json) => json.GetProperty("title").GetString();
+
+    private static string? GetCurrentSubTitle(System.Text.Json.JsonElement json) => json.TryGetProperty("#sub_title", out var subTitle) ? subTitle.GetString() : default;
 
     private static string? GetCurrentLongDescription(System.Text.Json.JsonElement json) => SanitiseHtml(json.GetProperty("comments").GetString());
 
@@ -599,6 +605,31 @@ public class CalibreLibrary : IDisposable
             : throw new InvalidOperationException("Failed to get last modified time");
     }
 
+    private IEnumerable<FieldToUpdate> UpdateTitle(string title, string currentTitle)
+    {
+        if (string.Equals(title, currentTitle, StringComparison.Ordinal))
+        {
+            yield break;
+        }
+
+        // execute calibredb to update the description
+        this.logger.LogInformation("Updating title");
+        yield return new FieldToUpdate("title", title);
+    }
+
+    private IEnumerable<FieldToUpdate> UpdateSubTitle(string? subTitle, string? currentSubTitle)
+    {
+        if ((subTitle is null && currentSubTitle is null)
+            || string.Equals(subTitle, currentSubTitle, StringComparison.Ordinal))
+        {
+            yield break;
+        }
+
+        // execute calibredb to update the description
+        this.logger.LogInformation("Updating sub title");
+        yield return new FieldToUpdate("#sub_title", subTitle);
+    }
+
     private IEnumerable<FieldToUpdate> UpdateDescription(System.Xml.XmlElement? longDescription, string? currentLongDescription) => longDescription is null
         ? Enumerable.Empty<FieldToUpdate>()
         : this.UpdateDescription(SanitiseHtml(longDescription.OuterXml), currentLongDescription);
@@ -715,10 +746,10 @@ public class CalibreLibrary : IDisposable
         }
     }
 
-    private async Task<(string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags, DateTimeOffset? Date)> GetCurrentAsync(int id, CancellationToken cancellationToken)
+    private async Task<(string Title, string? SubTitle, string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags, DateTimeOffset? Date)> GetCurrentAsync(int id, CancellationToken cancellationToken)
     {
         var document = await this.calibreDb
-            .ListAsync(new[] { "comments", "tags", "series", "series_index", "*sets", "pubdate" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+            .ListAsync(new[] { "title", "*sub_title", "comments", "tags", "series", "series_index", "*sets", "pubdate" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (document is null)
@@ -728,12 +759,14 @@ public class CalibreLibrary : IDisposable
 
         var json = document.RootElement.EnumerateArray().First();
 
+        var title = GetCurrentTitle(json);
+        var subTitle = GetCurrentSubTitle(json);
         var longDescription = GetCurrentLongDescription(json);
         (var seriesName, var seriesIndex) = GetCurrentSeries(json);
         var sets = GetCurrentSets(json);
         var tags = GetCurrentTags(json);
         var date = GetCurrentDate(json);
-        return (longDescription, seriesName, seriesIndex, sets, tags, date);
+        return (title, subTitle, longDescription, seriesName, seriesIndex, sets, tags, date);
     }
 
     private async Task<bool> SetMetadataAsync(int id, IEnumerable<FieldToUpdate> fields, CancellationToken cancellationToken = default)
