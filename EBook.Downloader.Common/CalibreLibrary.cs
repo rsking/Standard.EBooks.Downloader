@@ -433,7 +433,7 @@ public class CalibreLibrary : IDisposable
 
     private static string GetCurrentTitle(System.Text.Json.JsonElement json) => json.GetProperty("title").GetString();
 
-    private static string? GetCurrentSubtitle(System.Text.Json.JsonElement json) => json.TryGetProperty("#subtitle", out var subtitle) ? subtitle.GetString() : default;
+    private static string? GetCurrentSubtitle(System.Text.Json.JsonElement json) => json.TryGetProperty("*subtitle", out var subtitle) ? subtitle.GetString() : default;
 
     private static string? GetCurrentLongDescription(System.Text.Json.JsonElement json) => SanitiseHtml(json.GetProperty("comments").GetString());
 
