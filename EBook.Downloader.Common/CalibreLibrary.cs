@@ -207,6 +207,7 @@ public class CalibreLibrary : IDisposable
                 return true;
             }
 
+            this.logger.LogError("Failed to find file {Name}, tried {Path}", book.Name, fullPath);
             return false;
 
             async Task<CalibreBook?> AddBookAsync(EpubInfo info)
