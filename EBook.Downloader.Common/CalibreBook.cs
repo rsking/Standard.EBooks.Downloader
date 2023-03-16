@@ -158,8 +158,13 @@ public record class CalibreBook
             for (var i = 0; i < length; i++)
             {
                 var c = normalizedString[i];
-                var unicodeCategory = char.GetUnicodeCategory(c);
-                if (c > 128)
+                var category = char.GetUnicodeCategory(c);
+                if (category == System.Globalization.UnicodeCategory.SpaceSeparator)
+                {
+                    // any space separator should just be a ' ' character
+                    _ = stringBuilder.Append(' ');
+                }
+                else if (c > 128)
                 {
                     _ = stringBuilder.Append('_').Append('_');
                 }
@@ -167,7 +172,7 @@ public record class CalibreBook
                 {
                     _ = stringBuilder.Append('_');
                 }
-                else if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+                else if (category != System.Globalization.UnicodeCategory.NonSpacingMark)
                 {
                     _ = stringBuilder.Append(c);
                 }
