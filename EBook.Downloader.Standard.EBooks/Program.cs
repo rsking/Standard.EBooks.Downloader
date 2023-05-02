@@ -43,20 +43,17 @@ var downloadCommand = new CliCommand("download")
     afterOption,
 };
 
-downloadCommand.SetAction((parseResult, cancellationToken) =>
-{
-    return Download(
-        parseResult.GetHost(),
-        parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument).ThrowIfNull(),
-        parseResult.GetValue(outputPathOption).ThrowIfNull(),
-        parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption),
-        parseResult.GetValue(resyncOption),
-        parseResult.GetValue(afterOption),
-        parseResult.GetValue(maxTimeOffsetOption),
-        parseResult.GetValue(forcedSeriesOption),
-        parseResult.GetValue(forcedSetsOption),
-        cancellationToken);
-});
+downloadCommand.SetAction((parseResult, cancellationToken) => Download(
+    parseResult.GetHost(),
+    parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument).ThrowIfNull(),
+    parseResult.GetValue(outputPathOption).ThrowIfNull(),
+    parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption),
+    parseResult.GetValue(resyncOption),
+    parseResult.GetValue(afterOption),
+    parseResult.GetValue(maxTimeOffsetOption),
+    parseResult.GetValue(forcedSeriesOption),
+    parseResult.GetValue(forcedSetsOption),
+    cancellationToken));
 
 var metadataCommand = new CliCommand("metadata")
 {
