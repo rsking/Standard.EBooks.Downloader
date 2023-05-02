@@ -7,7 +7,6 @@
 
   <ItemGroup>
     <Compile Include="..\CommandLine.cs" Link="CommandLine.cs" />
-    <Compile Include="..\Bind.cs" Link="Bind.cs" />
   </ItemGroup>
 
   <ItemGroup>

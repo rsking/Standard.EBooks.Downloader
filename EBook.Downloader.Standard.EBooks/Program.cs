@@ -5,7 +5,6 @@
 // -----------------------------------------------------------------------
 
 using System.CommandLine;
-using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
 using AngleSharp;
@@ -28,15 +27,15 @@ const int MaxTimeOffset = 180;
 const string AtomUrl = "https://standardebooks.org/feeds/atom/new-releases";
 #pragma warning restore S1075 // URIs should not be hardcoded
 
-var maxTimeOffsetOption = new Option<int>(new[] { "-m", "--max-time-offset" }, () => MaxTimeOffset, "The maximum time offset");
-var forcedSeriesOption = new Option<FileInfo?>(new[] { "-f", "--forced-series" }, "A files containing the names of sets that should be series");
-var forcedSetsOption = new Option<FileInfo?>(new[] { "-s", "--forced-sets" }, "A files containing the names of sets that should be sets");
+var maxTimeOffsetOption = new CliOption<int>("-m", "--max-time-offset") { DefaultValueFactory = _ => MaxTimeOffset, Description = "The maximum time offset", Recursive = true };
+var forcedSeriesOption = new CliOption<FileInfo?>("-f", "--forced-series") { Description = "A files containing the names of sets that should be series", Recursive = true };
+var forcedSetsOption = new CliOption<FileInfo?>("-s", "--forced-sets") { Description = "A files containing the names of sets that should be sets", Recursive = true };
 
-var outputPathOption = new Option<DirectoryInfo>(new[] { "-o", "--output-path" }, () => new DirectoryInfo(Environment.CurrentDirectory), "The output path") { ArgumentHelpName = "PATH", Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
-var resyncOption = new Option<bool>(new[] { "-r", "--resync" }, "Forget the last saved state, perform a full sync");
-var afterOption = new Option<DateTime?>(new[] { "-a", "--after" }, ParseArgument, isDefault: false, "The time to download books after");
+var outputPathOption = new CliOption<DirectoryInfo>("-o", "--output-path") { DefaultValueFactory = _ => new DirectoryInfo(Environment.CurrentDirectory), Description = "The output path", HelpName = "PATH", Arity = ArgumentArity.ExactlyOne }.AcceptExistingOnly();
+var resyncOption = new CliOption<bool>("-r", "--resync") { Description = "Forget the last saved state, perform a full sync" };
+var afterOption = new CliOption<DateTime?>("-a", "--after") { CustomParser = ParseArgument, Description = "The time to download books after" };
 
-var downloadCommand = new Command("download")
+var downloadCommand = new CliCommand("download")
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
     outputPathOption,
@@ -44,67 +43,65 @@ var downloadCommand = new Command("download")
     afterOption,
 };
 
-downloadCommand.SetHandler(context =>
+downloadCommand.SetAction((parseResult, cancellationToken) =>
 {
-    var host = context.BindingContext.GetRequiredService<IHost>();
-    var libraryPath = context.ParseResult.GetValueForArgument(EBook.Downloader.CommandLine.LibraryPathArgument);
-    var outputPath = context.ParseResult.GetValueForOption(outputPathOption)!;
-    var useContentServer = context.ParseResult.GetValueForOption(EBook.Downloader.CommandLine.UseContentServerOption);
-    var resync = context.ParseResult.GetValueForOption(resyncOption);
-    var after = context.ParseResult.GetValueForOption(afterOption);
-    var maxTimeOffset = context.ParseResult.GetValueForOption(maxTimeOffsetOption);
-    var forcedSeries = context.ParseResult.GetValueForOption(forcedSeriesOption);
-    var forcesSets = context.ParseResult.GetValueForOption(forcedSetsOption);
-    var cancellationToken = context.GetCancellationToken();
-    return Download(host, libraryPath, outputPath, useContentServer, resync, after, maxTimeOffset, forcedSeries, forcesSets, cancellationToken);
+    return Download(
+        parseResult.GetHost(),
+        parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument).ThrowIfNull(),
+        parseResult.GetValue(outputPathOption).ThrowIfNull(),
+        parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption),
+        parseResult.GetValue(resyncOption),
+        parseResult.GetValue(afterOption),
+        parseResult.GetValue(maxTimeOffsetOption),
+        parseResult.GetValue(forcedSeriesOption),
+        parseResult.GetValue(forcedSetsOption),
+        cancellationToken);
 });
 
-var metadataCommand = new Command("metadata")
+var metadataCommand = new CliCommand("metadata")
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-metadataCommand.SetHandler(
-    Metadata,
-    EBook.Downloader.Bind.FromServiceProvider<IHost>(),
-    EBook.Downloader.CommandLine.LibraryPathArgument,
-    EBook.Downloader.CommandLine.UseContentServerOption,
-    maxTimeOffsetOption,
-    forcedSeriesOption,
-    forcedSetsOption,
-    EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
+metadataCommand.SetAction((parseResult, cancellationToken) =>
+    Metadata(
+        parseResult.GetHost(),
+        parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument).ThrowIfNull(),
+        parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption),
+        parseResult.GetValue(maxTimeOffsetOption),
+        parseResult.GetValue(forcedSeriesOption),
+        parseResult.GetValue(forcedSetsOption),
+        cancellationToken));
 
-var updateCommand = new Command("update")
+var updateCommand = new CliCommand("update")
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
     outputPathOption,
 };
 
-updateCommand.SetHandler(
-    Update,
-    EBook.Downloader.Bind.FromServiceProvider<IHost>(),
-    EBook.Downloader.CommandLine.LibraryPathArgument,
-    outputPathOption,
-    EBook.Downloader.CommandLine.UseContentServerOption,
-    maxTimeOffsetOption,
-    forcedSeriesOption,
-    forcedSetsOption,
-    EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
+updateCommand.SetAction((parseResult, cancellationToken) =>
+    Update(
+    parseResult.GetHost(),
+    parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument).ThrowIfNull(),
+    parseResult.GetValue(outputPathOption).ThrowIfNull(),
+    parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption),
+    parseResult.GetValue(maxTimeOffsetOption),
+    parseResult.GetValue(forcedSeriesOption),
+    parseResult.GetValue(forcedSetsOption),
+    cancellationToken));
 
-var rootCommand = new RootCommand("Standard EBook Downloader")
+var rootCommand = new CliRootCommand("Standard EBook Downloader")
 {
     downloadCommand,
     metadataCommand,
     updateCommand,
+    EBook.Downloader.CommandLine.UseContentServerOption,
+    maxTimeOffsetOption,
+    forcedSeriesOption,
+    forcedSetsOption,
 };
 
-rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
-rootCommand.AddGlobalOption(maxTimeOffsetOption);
-rootCommand.AddGlobalOption(forcedSeriesOption);
-rootCommand.AddGlobalOption(forcedSetsOption);
-
-var builder = new CommandLineBuilder(rootCommand)
-    .UseDefaults()
+var configuration = new CliConfiguration(rootCommand)
     .UseHost(
         Host.CreateDefaultBuilder,
         configureHost =>
@@ -138,11 +135,9 @@ var builder = new CommandLineBuilder(rootCommand)
                     _ = services
                         .Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true);
                 });
-        })
-    .CancelOnProcessTermination();
+        });
 
-return await builder
-    .Build()
+return await configuration
     .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
 
@@ -206,6 +201,8 @@ static async Task Download(
         (_, true) => DateTime.MinValue.ToUniversalTime(),
         _ => File.GetLastWriteTimeUtc(sentinelPath),
     };
+
+    var sentinelDateTimeOffset = new DateTimeOffset(sentinelDateTime);
     var sentinelLock = new object();
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
@@ -220,7 +217,7 @@ static async Task Download(
     var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri, cancellationToken).ConfigureAwait(false);
     using var calibreLibrary = new CalibreLibrary(calibreDb, host.Services.GetRequiredService<ILogger<CalibreLibrary>>());
     foreach (var item in atom.Feed.Items
-        .Where(item => item.LastUpdatedTime > sentinelDateTime)
+        .Where(item => item.LastUpdatedTime > sentinelDateTimeOffset)
         .OrderBy(item => item.LastUpdatedTime)
         .AsParallel())
     {

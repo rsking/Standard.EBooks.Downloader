@@ -5,53 +5,49 @@
 // -----------------------------------------------------------------------
 
 using System.CommandLine;
-using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
-using System.CommandLine.Parsing;
 using EBook.Downloader.Calibre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var tagsCommand = new Command(nameof(Tags).ToLowerInvariant())
+var tagsCommand = new CliCommand(nameof(Tags).ToLowerInvariant())
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-tagsCommand.SetHandler(Tags, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
+tagsCommand.SetAction((parseResult, cancellationToken) => Tags(parseResult.GetHost(), parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument)!, parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption), cancellationToken));
 
-var descriptionCommand = new Command(nameof(Description).ToLowerInvariant())
+var descriptionCommand = new CliCommand(nameof(Description).ToLowerInvariant())
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
 };
 
-descriptionCommand.SetHandler(Description, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption);
+descriptionCommand.SetAction((parseResult, cancellationToken) => Description(parseResult.GetHost(), parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument)!, parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption), cancellationToken));
 
-var rootCommand = new RootCommand("Calibre EBook Maintenence")
+var rootCommand = new CliRootCommand("Calibre EBook Maintenence")
 {
     tagsCommand,
     descriptionCommand,
+    EBook.Downloader.CommandLine.UseContentServerOption,
 };
 
-rootCommand.AddGlobalOption(EBook.Downloader.CommandLine.UseContentServerOption);
-
-var builder = new CommandLineBuilder(rootCommand)
-    .UseDefaults()
+var configuration = new CliConfiguration(rootCommand)
     .UseHost(Host.CreateDefaultBuilder, builder => builder.ConfigureServices(services => services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true)));
 
-return await builder
-    .Build()
+return await configuration
     .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
 
 static async Task Tags(
     IHost host,
     DirectoryInfo calibreLibraryPath,
-    bool useContentServer)
+    bool useContentServer,
+    CancellationToken cancellationToken)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
     await foreach (var category in calibreDb
-        .ShowCategoriesAsync()
+        .ShowCategoriesAsync(cancellationToken)
         .Where(category => category.CategoryType == CategoryType.Tags)
         .ConfigureAwait(false))
     {
@@ -133,10 +129,11 @@ static async Task Tags(
 static async Task Description(
     IHost host,
     DirectoryInfo calibreLibraryPath,
-    bool useContentServer)
+    bool useContentServer,
+    CancellationToken cancellationToken)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
-    var json = await calibreDb.ListAsync(new[] { "comments", "title" }).ConfigureAwait(false);
+    var json = await calibreDb.ListAsync(new[] { "comments", "title" }, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (json is null)
     {
         return;

@@ -3,7 +3,6 @@
 // </copyright>
 
 using System.CommandLine;
-using System.CommandLine.Builder;
 using System.CommandLine.Hosting;
 using System.CommandLine.Parsing;
 using AngleSharp;
@@ -13,19 +12,18 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
-var coverOption = new Option<bool>(new[] { "-c", "--cover" }, "Download covers");
+var coverOption = new CliOption<bool>("-c", "--cover") { Description = "Download covers" };
 
-var rootCommand = new RootCommand("Syncfusion EBook Updater")
+var rootCommand = new CliRootCommand("Syncfusion EBook Updater")
 {
     EBook.Downloader.CommandLine.LibraryPathArgument,
     EBook.Downloader.CommandLine.UseContentServerOption,
     coverOption,
 };
 
-rootCommand.SetHandler(Process, EBook.Downloader.Bind.FromServiceProvider<IHost>(), EBook.Downloader.CommandLine.LibraryPathArgument, EBook.Downloader.CommandLine.UseContentServerOption, coverOption, EBook.Downloader.Bind.FromServiceProvider<CancellationToken>());
+rootCommand.SetAction((parseResult, cancellationToken) => Process(parseResult.GetHost(), parseResult.GetValue(EBook.Downloader.CommandLine.LibraryPathArgument)!, parseResult.GetValue(EBook.Downloader.CommandLine.UseContentServerOption), parseResult.GetValue(coverOption), cancellationToken));
 
-var builder = new CommandLineBuilder(rootCommand)
-    .UseDefaults()
+var configuration = new CliConfiguration(rootCommand)
     .UseHost(
         Host.CreateDefaultBuilder,
         configureHost =>
@@ -40,9 +38,7 @@ var builder = new CommandLineBuilder(rootCommand)
                     .Services.Configure<InvocationLifetimeOptions>(options => options.SuppressStatusMessages = true));
         });
 
-return await builder
-    .CancelOnProcessTermination()
-    .Build()
+return await configuration
     .InvokeAsync(args.Select(Environment.ExpandEnvironmentVariables).ToArray())
     .ConfigureAwait(false);
 

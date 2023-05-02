@@ -19,16 +19,16 @@
     <PackageVersion Include="Serilog.AspNetCore" Version="6.1.0" />
     <PackageVersion Include="Serilog.Enrichers.Thread" Version="3.1.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="1.2.0" />
-    <PackageVersion Include="System.CommandLine.Hosting" Version="0.4.0-alpha.22272.1" />
+    <PackageVersion Include="System.CommandLine.Hosting" Version="0.4.0-alpha.23219.2" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.1" />
     <PackageVersion Include="System.ServiceModel.Syndication" Version="7.0.0" />
     <PackageVersion Include="System.Text.Json" Version="4.6.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <GlobalPackageReference Include="Meziantou.Analyzer" Version="2.0.19" />
-    <GlobalPackageReference Include="Roslynator.Analyzers" Version="4.2.0" />
-    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="8.53.0.62665" />
+    <GlobalPackageReference Include="Meziantou.Analyzer" Version="2.0.43" />
+    <GlobalPackageReference Include="Roslynator.Analyzers" Version="4.3.0" />
+    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="9.0.0.68202" />
     <GlobalPackageReference Include="StyleCop.Analyzers.Unstable" Version="1.2.0.435" />
   </ItemGroup>
 

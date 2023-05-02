@@ -29,4 +29,14 @@ internal static class ExtensionMethods
         string value when value.EndsWith(".epub3", StringComparison.OrdinalIgnoreCase) => Path.ChangeExtension(value, ".epub"),
         string value => value,
     };
+
+    /// <summary>
+    /// Throws if the specified value is null.
+    /// </summary>
+    /// <typeparam name="T">The type of value.</typeparam>
+    /// <param name="value">The value.</param>
+    /// <returns>The non-null value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> was <see langword="null"/>.</exception>
+    public static T ThrowIfNull<T>(this T? value)
+        where T : class => value ?? throw new ArgumentNullException(nameof(value));
 }

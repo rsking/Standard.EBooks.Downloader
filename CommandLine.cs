@@ -14,10 +14,10 @@ internal static class CommandLine
     /// <summary>
     /// Gets the library path argument.
     /// </summary>
-    public static Argument<DirectoryInfo> LibraryPathArgument { get; } = new Argument<DirectoryInfo>("CALIBRE-LIBRARY-PATH", "The path to the directory containing the calibre library") { Arity = ArgumentArity.ExactlyOne }.ExistingOnly();
+    public static CliArgument<DirectoryInfo> LibraryPathArgument { get; } = new CliArgument<DirectoryInfo>("CALIBRE-LIBRARY-PATH") { Description = "The path to the directory containing the calibre library", Arity = ArgumentArity.ExactlyOne }.AcceptExistingOnly();
 
     /// <summary>
     /// Gets the use content server argument.
     /// </summary>
-    public static Option<bool> UseContentServerOption { get; } = new(new[] { "-s", "--use-content-server" }, "Whether to use the content server or not");
+    public static CliOption<bool> UseContentServerOption { get; } = new("-s", "--use-content-server") { Description = "Whether to use the content server or not", Recursive = true };
 }
