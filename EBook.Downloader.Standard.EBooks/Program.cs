@@ -206,9 +206,11 @@ static async Task Download(
     var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
     var calibreDb = new EBook.Downloader.Calibre.CalibreDb(calibreLibraryPath.FullName, useContentServer, host.Services.GetRequiredService<ILogger<EBook.Downloader.Calibre.CalibreDb>>());
+    var authors = Sanitize(await GetAuthorsAsync(calibreDb, cancellationToken).ConfigureAwait(false));
+    CheckForNonAscii(authors);
     var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-    var series = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName).ToArray();
-    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
+    var series = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName));
+    var sets = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName));
 
     var atomUri = new Uri(AtomUrl);
     var atom = await GetAtomAsync(host.Services.GetRequiredService<IDistributedCache>(), httpClientFactory, atomUri, cancellationToken).ConfigureAwait(false);
@@ -248,6 +250,7 @@ static async Task Download(
                 extension,
                 forcedSeriesEnumerable,
                 forcedSetsEnumerable,
+                authors,
                 series,
                 sets,
                 maxTimeOffset,
@@ -365,9 +368,12 @@ static async Task Metadata(
     var forcedSeriesEnumerable = GetRegexFromFile(forcedSeries);
     var forcedSetsEnumerable = GetRegexFromFile(forcedSets);
 
-    // get the current sets and series
+    // get the current authors, sets and series
+    var authors = Sanitize(await GetAuthorsAsync(calibreDb, cancellationToken).ConfigureAwait(false));
+    CheckForNonAscii(authors);
     var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
+    var sets = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName));
+    var series = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName));
 
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
@@ -376,7 +382,7 @@ static async Task Metadata(
         if (File.Exists(filePath))
         {
             var epub = EpubInfo.Parse(filePath, parseDescription: true);
-            epub = await UpdateEpubInfoAsync(epub, calibreLibrary, forcedSeriesEnumerable, forcedSetsEnumerable, sets, programLogger, cancellationToken).ConfigureAwait(false);
+            epub = await UpdateEpubInfoAsync(epub, calibreLibrary, forcedSeriesEnumerable, forcedSetsEnumerable, authors, series, sets, programLogger, cancellationToken).ConfigureAwait(false);
             await calibreLibrary.UpdateAsync(book, epub, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -387,14 +393,16 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
     CalibreLibrary calibreLibrary,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
-    IEnumerable<string> sets,
+    IDictionary<string, string> authors,
+    IDictionary<string, string> series,
+    IDictionary<string, string> sets,
     Microsoft.Extensions.Logging.ILogger logger,
     CancellationToken cancellationToken)
 {
     System.Xml.XmlElement? longDescription = default;
     if (epub.LongDescription is not null)
     {
-        longDescription = await UpdateLongDescriptionAsync(epub.LongDescription, calibreLibrary, sets, logger, cancellationToken).ConfigureAwait(false);
+        longDescription = await UpdateLongDescriptionAsync(epub.LongDescription, calibreLibrary, authors, series, sets, logger, cancellationToken).ConfigureAwait(false);
     }
 
     // update the sets and series
@@ -407,11 +415,11 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
 
     return epub with { LongDescription = longDescription, Collections = collections };
 
-    async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, IEnumerable<string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, IDictionary<string, string> authors, IDictionary<string, string> series, IDictionary<string, string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
-        var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)/(?<book>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-        var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-        var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)/(?<book>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
 
         // update the description with internal links
         var document = await Parser.ParseDocumentAsync(longDescription.OuterXml, cancellationToken).ConfigureAwait(false);
@@ -423,11 +431,23 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
             {
                 if (bookRegex.IsMatch(uri))
                 {
+                    // check to see if this has '/text/' in it
+                    var index = uri.IndexOf("/text/", StringComparison.Ordinal);
+                    if (index > 0)
+                    {
+                        // remove anything from this onwards
+                        uri = uri[..index];
+                    }
+
                     logger.LogDebug("Looking up link to {Uri}", uri);
                     if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
                     {
                         anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
                         updated = true;
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to find book for {Uri}", uri);
                     }
                 }
                 else if (authorRegex.IsMatch(uri))
@@ -435,11 +455,22 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     logger.LogDebug("Found author URI");
 
                     // set this to seach for the author
-                    var match = authorRegex.Match(uri);
-                    var author = match.Groups["author"];
-                    var search = $"author:\"={author.Value.Replace('-', ' ')}\"";
-                    anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
-                    updated = true;
+                    var authorGroup = authorRegex.Match(uri).Groups["author"];
+                    if (authors.TryGetValue(Strip(authorGroup.Value), out var author))
+                    {
+                        var search = $"author:\"={author}\"";
+                        anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                        updated = true;
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to find author for {Author}", authorGroup.Value);
+                    }
+
+                    static string Strip(string author)
+                    {
+                        return string.Concat(author.Where(c => !char.IsDigit(c))).TrimEnd('-');
+                    }
                 }
                 else if (collectionsRegex.IsMatch(uri))
                 {
@@ -448,14 +479,26 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     var match = collectionsRegex.Match(uri);
                     var collection = match.Groups["collection"];
 
-                    var value = collection.Value.Replace('-', ' ');
-                    var type = sets.Contains(value, StringComparer.OrdinalIgnoreCase)
-                        ? "sets"
-                        : "series";
+                    string? type = default;
+                    if (sets.TryGetValue(collection.Value, out var value))
+                    {
+                        type = "sets";
+                    }
+                    else if (series.TryGetValue(collection.Value, out value))
+                    {
+                        type = "series";
+                    }
 
-                    var search = $"{type}:\"={value}\"";
-                    anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
-                    updated = true;
+                    if (type is not null && value is not null)
+                    {
+                        var search = $"{type}:\"={value}\"";
+                        anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
+                        updated = true;
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to find collection for {Collection}", collection.Value);
+                    }
                 }
                 else
                 {
@@ -507,9 +550,11 @@ static async Task Update(
     var httpClientFactory = host.Services.GetRequiredService<IHttpClientFactory>();
     var parser = new AngleSharp.Html.Parser.HtmlParser();
 
+    var authors = Sanitize(await GetAuthorsAsync(calibreDb, cancellationToken).ConfigureAwait(false));
+    CheckForNonAscii(authors);
     var categories = await calibreDb.ShowCategoriesAsync(cancellationToken).ToArrayAsync(cancellationToken).ConfigureAwait(false);
-    var sets = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName).ToArray();
-    var series = categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName).ToArray();
+    var sets = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Sets).Select(category => category.TagName));
+    var series = Sanitize(categories.Where(category => category.CategoryType == EBook.Downloader.Calibre.CategoryType.Series).Select(category => category.TagName));
 
     // get all the books from standard e-books
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
@@ -526,7 +571,7 @@ static async Task Update(
                 // get the extension
                 var extension = GetExtension(bookUri);
                 var last = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
-                await DownloadIfRequired(programLogger, calibreLibrary, httpClientFactory, bookUri, last, outputPath, extension, forcedSeriesEnumerable, forcedSetsEnumerable, series, sets,  maxTimeOffset, cancellationToken).ConfigureAwait(false);
+                await DownloadIfRequired(programLogger, calibreLibrary, httpClientFactory, bookUri, last, outputPath, extension, forcedSeriesEnumerable, forcedSetsEnumerable, authors, series, sets,  maxTimeOffset, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -598,8 +643,9 @@ static async Task DownloadIfRequired(
     string extension,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
-    IEnumerable<string> series,
-    IEnumerable<string> sets,
+    IDictionary<string, string> authors,
+    IDictionary<string, string> series,
+    IDictionary<string, string> sets,
     int maxTimeOffset,
     CancellationToken cancellationToken)
 {
@@ -647,7 +693,7 @@ static async Task DownloadIfRequired(
         return;
     }
 
-    var epubInfo = await UpdateEpubInfoAsync(EpubInfo.Parse(path, !IsKePub(extension)), calibreLibrary, forcedSeries, forcedSets, sets, programLogger, cancellationToken).ConfigureAwait(false);
+    var epubInfo = await UpdateEpubInfoAsync(EpubInfo.Parse(path, !IsKePub(extension)), calibreLibrary, forcedSeries, forcedSets, authors, series, sets, programLogger, cancellationToken).ConfigureAwait(false);
     if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
@@ -724,6 +770,65 @@ static async Task<DateTime> GetLastWriteTime(
 static bool IsKePub(string extension)
 {
     return string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
+}
+
+static IDictionary<string, string> Sanitize(IEnumerable<string> value)
+{
+    return value.ToDictionary(x => RemovePunctuation(RemoveDiacritics(x.Replace('-', ' '))).Replace(' ', '-').ToLowerInvariant(), StringComparer.Ordinal);
+
+    static string RemoveDiacritics(string input)
+    {
+        var length = input.Length;
+        var outputChars = new char[4 * length];
+
+        var characters = Lucene.Net.Analysis.Miscellaneous.ASCIIFoldingFilter.FoldToASCII(input.ToCharArray(), 0, outputChars, 0, length);
+
+        return new string(outputChars, 0, characters);
+    }
+
+    static string RemovePunctuation(string text)
+    {
+        return string.Concat(text.Where(c => !char.IsPunctuation(c)));
+    }
+}
+
+static void CheckForNonAscii(IDictionary<string, string> values)
+{
+#pragma warning disable S3267 // Loops should be simplified with "LINQ" expressions
+    foreach (var value in values)
+    {
+        if (value.Key.Any(c => !char.IsAscii(c)))
+        {
+            throw new InvalidOperationException($"Found non-ASCII characters in {value.Key}");
+        }
+    }
+#pragma warning restore S3267 // Loops should be simplified with "LINQ" expressions
+}
+
+static async Task<IEnumerable<string>> GetAuthorsAsync(EBook.Downloader.Calibre.CalibreDb calibreDb, CancellationToken cancellationToken = default)
+{
+    return GetEnumerable(await calibreDb.ListAsync(fields: new string[] { "authors" }, sortBy: "authors", cancellationToken: cancellationToken).ConfigureAwait(false))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    static IEnumerable<string> GetEnumerable(System.Text.Json.JsonDocument? document)
+    {
+        if (document is null)
+        {
+            yield break;
+        }
+
+        foreach (var element in document.RootElement.EnumerateArray())
+        {
+            if (element.TryGetProperty("authors", out var authorElement)
+                && authorElement.GetString() is string authors)
+            {
+                foreach (var author in authors.Split('&'))
+                {
+                    yield return author.Trim();
+                }
+            }
+        }
+    }
 }
 
 /// <content>
