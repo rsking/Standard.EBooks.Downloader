@@ -512,6 +512,7 @@ public class CalibreLibrary : IDisposable
             .Select(tag => tag.Trim())
             .Select(CaseCorrectly)
             .Select(ReplaceCommas)
+            .Select(RemoveQuotes)
             .Distinct(StringComparer.Ordinal);
 
         static IEnumerable<string> SplitByDashes(string value)
@@ -522,6 +523,11 @@ public class CalibreLibrary : IDisposable
         static string ReplaceCommas(string tag)
         {
             return tag.Replace(',', '‚');
+        }
+
+        static string RemoveQuotes(string tag)
+        {
+            return tag.Replace("\"", string.Empty);
         }
 
         static string CaseCorrectly(string value)
