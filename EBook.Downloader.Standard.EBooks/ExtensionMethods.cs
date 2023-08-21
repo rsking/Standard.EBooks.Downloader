@@ -11,6 +11,8 @@ namespace EBook.Downloader.Standard.EBooks;
 /// </summary>
 internal static class ExtensionMethods
 {
+    private static readonly IDictionary<(Type Key, Type), System.Reflection.MethodInfo> GetGroupings = new Dictionary<(Type Key, Type Type), System.Reflection.MethodInfo>();
+
     /// <summary>
     /// Gets the extension for the specified URL.
     /// </summary>
@@ -39,4 +41,48 @@ internal static class ExtensionMethods
     /// <exception cref="ArgumentNullException"><paramref name="value"/> was <see langword="null"/>.</exception>
     public static T ThrowIfNull<T>(this T? value)
         where T : class => value ?? throw new ArgumentNullException(nameof(value));
+
+    /// <summary>
+    /// Tries to get the values from the lookup.
+    /// </summary>
+    /// <typeparam name="TKey">The type of key.</typeparam>
+    /// <typeparam name="TElement">The type of element.</typeparam>
+    /// <param name="source">The source.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="values">The values.</param>
+    /// <returns>The result.</returns>
+    public static bool TryGetValues<TKey, TElement>(this ILookup<TKey, TElement> source, TKey key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IEnumerable<TElement>? values)
+    {
+        var method = GetGrouping(typeof(TKey), typeof(TElement));
+
+        var grouping = method.Invoke(source, new object?[] { key, false }) as IGrouping<TKey, TElement>;
+        if (grouping is not null)
+        {
+            values = grouping;
+            return true;
+        }
+
+        values = default;
+        return false;
+    }
+
+    private static System.Reflection.MethodInfo GetGrouping(Type key, Type element)
+    {
+        var groupingKey = (key, element);
+        if (GetGroupings.TryGetValue(groupingKey, out var method))
+        {
+            return method;
+        }
+
+        method = GetGrouping(groupingKey);
+        GetGroupings.Add(groupingKey, method);
+        return method;
+
+        static System.Reflection.MethodInfo GetGrouping((Type Key, Type Element) groupingKey)
+        {
+            var type = typeof(Lookup<,>);
+            type = type.MakeGenericType(groupingKey.Key, groupingKey.Element);
+            return type.GetMethod(nameof(GetGrouping), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        }
+    }
 }

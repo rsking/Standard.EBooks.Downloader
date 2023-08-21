@@ -393,9 +393,9 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
     CalibreLibrary calibreLibrary,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
-    IDictionary<string, string> authors,
-    IDictionary<string, string> series,
-    IDictionary<string, string> sets,
+    ILookup<string, string> authors,
+    ILookup<string, string> series,
+    ILookup<string, string> sets,
     Microsoft.Extensions.Logging.ILogger logger,
     CancellationToken cancellationToken)
 {
@@ -415,7 +415,7 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
 
     return epub with { LongDescription = longDescription, Collections = collections };
 
-    async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, IDictionary<string, string> authors, IDictionary<string, string> series, IDictionary<string, string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, ILookup<string, string> authors, ILookup<string, string> series, ILookup<string, string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
         var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)/(?<book>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
         var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
@@ -456,9 +456,9 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
 
                     // set this to seach for the author
                     var authorGroup = authorRegex.Match(uri).Groups["author"];
-                    if (authors.TryGetValue(Strip(authorGroup.Value), out var author))
+                    if (authors.TryGetValues(Strip(authorGroup.Value), out var author))
                     {
-                        var search = $"author:\"={author}\"";
+                        var search = $"author:\"={author.First()}\"";
                         anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
                         updated = true;
                     }
@@ -480,18 +480,18 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     var collection = match.Groups["collection"];
 
                     string? type = default;
-                    if (sets.TryGetValue(collection.Value, out var value))
+                    if (sets.TryGetValues(collection.Value, out var value))
                     {
                         type = "sets";
                     }
-                    else if (series.TryGetValue(collection.Value, out value))
+                    else if (series.TryGetValues(collection.Value, out value))
                     {
                         type = "series";
                     }
 
                     if (type is not null && value is not null)
                     {
-                        var search = $"{type}:\"={value}\"";
+                        var search = $"{type}:\"={value.First()}\"";
                         anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
                         updated = true;
                     }
@@ -643,9 +643,9 @@ static async Task DownloadIfRequired(
     string extension,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries,
     IEnumerable<System.Text.RegularExpressions.Regex> forcedSets,
-    IDictionary<string, string> authors,
-    IDictionary<string, string> series,
-    IDictionary<string, string> sets,
+    ILookup<string, string> authors,
+    ILookup<string, string> series,
+    ILookup<string, string> sets,
     int maxTimeOffset,
     CancellationToken cancellationToken)
 {
@@ -772,9 +772,9 @@ static bool IsKePub(string extension)
     return string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
 }
 
-static IDictionary<string, string> Sanitize(IEnumerable<string> value)
+static ILookup<string, string> Sanitize(IEnumerable<string> value)
 {
-    return value.ToDictionary(x => RemovePunctuation(RemoveDiacritics(x.Replace('-', ' '))).Replace(' ', '-').ToLowerInvariant(), StringComparer.Ordinal);
+    return value.ToLookup(x => RemovePunctuation(RemoveDiacritics(x.Replace('-', ' '))).Replace(' ', '-').ToLowerInvariant(), StringComparer.Ordinal);
 
     static string RemoveDiacritics(string input)
     {
@@ -792,7 +792,7 @@ static IDictionary<string, string> Sanitize(IEnumerable<string> value)
     }
 }
 
-static void CheckForNonAscii(IDictionary<string, string> values)
+static void CheckForNonAscii(ILookup<string, string> values)
 {
 #pragma warning disable S3267 // Loops should be simplified with "LINQ" expressions
     foreach (var value in values)
