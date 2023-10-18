@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Http" />
-    <PackageReference Include="NeoSmart.Caching.Sqlite" />
+    <PackageReference Include="NeoSmart.Caching.Sqlite.AspNetCore" />
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Enrichers.Thread" />
     <PackageReference Include="System.CommandLine.Hosting" />

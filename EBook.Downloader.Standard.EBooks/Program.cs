@@ -14,7 +14,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NeoSmart.Caching.Sqlite;
+using NeoSmart.Caching.Sqlite.AspNetCore;
 using Serilog;
 
 const int SentinelRetryCount = 30;
