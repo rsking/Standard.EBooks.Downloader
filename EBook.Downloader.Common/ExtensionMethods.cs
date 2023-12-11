@@ -101,10 +101,11 @@ public static class ExtensionMethods
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Series"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSeries(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection.Type switch
+    public static bool IsSeries(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection switch
     {
-        EpubCollectionType.Series => !forcedSets.IsAnyMatch(collection.Name),
-        EpubCollectionType.Set => forcedSeries.IsAnyMatch(collection.Name),
+        { Position: 0, Type: EpubCollectionType.Series } => false,
+        { Type: EpubCollectionType.Series } => !forcedSets.IsAnyMatch(collection.Name),
+        { Type: EpubCollectionType.Set } => forcedSeries.IsAnyMatch(collection.Name),
         _ => false,
     };
 
@@ -115,10 +116,11 @@ public static class ExtensionMethods
     /// <param name="forcedSeries">The list of <see cref="EpubCollectionType.Set"/> that should be considered to be a <see cref="EpubCollectionType.Series"/>.</param>
     /// <param name="forcedSets">The list of <see cref="EpubCollectionType.Series"/> that should be considered to be a <see cref="EpubCollectionType.Set"/>.</param>
     /// <returns><see langword="true"/> if the collection a <see cref="EpubCollectionType.Set"/>; otherwise <see langword="false"/>.</returns>
-    public static bool IsSet(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection.Type switch
+    public static bool IsSet(this EpubCollection collection, IEnumerable<System.Text.RegularExpressions.Regex> forcedSeries, IEnumerable<System.Text.RegularExpressions.Regex> forcedSets) => collection switch
     {
-        EpubCollectionType.Series => forcedSets.IsAnyMatch(collection.Name),
-        EpubCollectionType.Set => !forcedSeries.IsAnyMatch(collection.Name),
+        { Position: 0, Type: not EpubCollectionType.Set } => true,
+        { Type: EpubCollectionType.Series } => forcedSets.IsAnyMatch(collection.Name),
+        { Type: EpubCollectionType.Set } => !forcedSeries.IsAnyMatch(collection.Name),
         _ => false,
     };
 
