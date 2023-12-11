@@ -96,3 +96,8 @@ dotnet_diagnostic.MA0051.severity = none
 
 # MA0056: Do not call overridable members in constructor
 dotnet_diagnostic.MA0056.severity = none
+
+#### SONAR ####
+
+# S6618: "string.Create" should be used instead of "FormattableString"
+dotnet_diagnostic.S6618.severity = none

@@ -409,11 +409,8 @@ public class CalibreDb
                         return;
                     }
 
-                    if (value is not null)
-                    {
-                        lines.Enqueue(value);
-                        resetEvent.Set();
-                    }
+                    lines.Enqueue(value);
+                    resetEvent.Set();
                 }
             },
             () =>

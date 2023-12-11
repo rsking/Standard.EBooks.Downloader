@@ -78,11 +78,12 @@ internal static class ExtensionMethods
         GetGroupings.Add(groupingKey, method);
         return method;
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "Checked")]
         static System.Reflection.MethodInfo GetGrouping((Type Key, Type Element) groupingKey)
         {
             var type = typeof(Lookup<,>);
             type = type.MakeGenericType(groupingKey.Key, groupingKey.Element);
-            return type.GetMethod(nameof(GetGrouping), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return type.GetMethod(nameof(GetGrouping), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         }
     }
 }

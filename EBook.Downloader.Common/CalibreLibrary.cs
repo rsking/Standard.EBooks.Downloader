@@ -21,6 +21,8 @@ public class CalibreLibrary : IDisposable
 
     private const string SelectLastModifiedById = "SELECT last_modified FROM books WHERE id = :id";
 
+    private static readonly string[] Separator = ["--"];
+
     private static readonly AngleSharp.Html.Parser.HtmlParser Parser = new();
 
     private readonly ILogger logger;
@@ -122,7 +124,7 @@ public class CalibreLibrary : IDisposable
     public async IAsyncEnumerable<CalibreBook> GetBooksByPublisherAsync(string publisher, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var searchPattern = $"publisher:\"{publisher}\"";
-        var books = await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers", "publisher" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var books = await this.calibreDb.ListAsync(["id", "authors", "title", "last_modified", "identifiers", "publisher"], searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         foreach (var book in GetCalibreBooks(books, element => element.TryGetProperty("publisher", out var publisherElement) && string.Equals(publisherElement.GetString(), publisher, StringComparison.Ordinal)))
         {
@@ -343,13 +345,12 @@ public class CalibreLibrary : IDisposable
                 .Concat(this.UpdateTags(SanitiseTags(epub.Tags), currentTags))
                 .Concat(this.UpdateDate(epub.Date, currentDate));
             if (await this.SetMetadataAsync(book.Id, fields, cancellationToken).ConfigureAwait(false)
-
-                // refresh the book with the last data
                 && await this.GetCalibreBookAsync(book.Id, cancellationToken).ConfigureAwait(false) is CalibreBook processed)
             {
                 book = processed;
             }
 
+            // refresh the book with the last data
             await this.UpdateLastModifiedAsync(book, epub.Path.LastWriteTimeUtc, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -517,7 +518,7 @@ public class CalibreLibrary : IDisposable
 
         static IEnumerable<string> SplitByDashes(string value)
         {
-            return value.Split(new string[] { "--" }, StringSplitOptions.RemoveEmptyEntries);
+            return value.Split(Separator, StringSplitOptions.RemoveEmptyEntries);
         }
 
         static string ReplaceCommas(string tag)
@@ -541,7 +542,7 @@ public class CalibreLibrary : IDisposable
                 return value.IndexOf('(') switch
                 {
                     -1 => (value, default(string)),
-                    (int index) => (value.Substring(0, index - 1), value.Substring(index)),
+                    int index => (value.Substring(0, index - 1), value.Substring(index)),
                 };
             }
 
@@ -756,7 +757,7 @@ public class CalibreLibrary : IDisposable
     private async Task<(string Title, string? Subtitle, string? LongDescription, string? SeriesName, float SeriesIndex, string? Sets, IEnumerable<string> Tags, DateTimeOffset? Date)> GetCurrentAsync(int id, CancellationToken cancellationToken)
     {
         var document = await this.calibreDb
-            .ListAsync(new[] { "title", "*subtitle", "comments", "tags", "series", "series_index", "*sets", "pubdate" }, searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
+            .ListAsync(["title", "*subtitle", "comments", "tags", "series", "series_index", "*sets", "pubdate"], searchPattern: FormattableString.Invariant($"id:\"={id}\""), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         if (document is null)
@@ -823,14 +824,14 @@ public class CalibreLibrary : IDisposable
 
     private Task<CalibreBook?> GetCalibreBookAsync(Calibre.Identifier identifier, string format, CancellationToken cancellationToken) => this.GetCalibreBookAsync($"identifier:\"={identifier}\" and formats:\"{format}\"", element => CheckIdentifier(element, identifier), cancellationToken);
 
-    private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(new[] { "id", "authors", "title", "last_modified", "identifiers" }, searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
+    private async Task<CalibreBook?> GetCalibreBookAsync(string searchPattern, Func<System.Text.Json.JsonElement, bool> predicate, CancellationToken cancellationToken) => GetCalibreBook(await this.calibreDb.ListAsync(["id", "authors", "title", "last_modified", "identifiers"], searchPattern: searchPattern, cancellationToken: cancellationToken).ConfigureAwait(false), predicate);
 
     private sealed record class FieldToUpdate(string Field, object? Value);
 
     private static class Words
     {
-        public static readonly IEnumerable<string> LowerCase = new[]
-        {
+        public static readonly IEnumerable<string> LowerCase =
+        [
             "a",
             "for",
             "of",
@@ -845,6 +846,6 @@ public class CalibreLibrary : IDisposable
             "to",
             "ca.",
             "into",
-        };
+        ];
     }
 }
