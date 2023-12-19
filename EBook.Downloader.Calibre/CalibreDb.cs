@@ -68,7 +68,7 @@ public class CalibreDb
         this.useContentServer = useContentServer;
         var builder = new UriBuilder
         {
-            Host = "127.0.0.1",
+            Host = "localhost",
             Port = 8080,
             Fragment = System.IO.Path.GetFileName(path),
         };
