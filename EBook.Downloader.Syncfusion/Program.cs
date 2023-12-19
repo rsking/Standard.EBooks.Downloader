@@ -114,24 +114,29 @@ static async Task Process(
 
         var requestUri = response.RequestMessage?.RequestUri;
 
-        var html = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        var document = new HtmlAgilityPack.HtmlDocument();
-        document.LoadHtml(html);
+        var parser = new AngleSharp.Html.Parser.HtmlParser();
+        AngleSharp.Html.Dom.IHtmlDocument document;
 
-        var tabSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("tab-section"));
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
+        {
+            document = await parser.ParseDocumentAsync(stream, cancellationToken).ConfigureAwait(false);
+        }
+
+        var tabSections = document.GetElementsByClassName("tab-section");
         string? actualDescription = default;
         if (tabSections is not null)
         {
             string? header = default;
-            foreach (var tabSection in tabSections.SelectMany(tabSection => tabSection.Descendants("div")))
+            foreach (var tabSection in tabSections.SelectMany(tabSection => tabSection.GetElementsByTagName("div")))
             {
-                if (tabSection.HasClass("tab__title"))
+                if (tabSection.ClassName?.Contains("tab__title") == true)
                 {
-                    header = tabSection.InnerText;
+                    header = tabSection.TextContent;
                     continue;
                 }
 
-                if (tabSection.HasClass("tab__content"))
+                if (tabSection.ClassName?.Contains("tab__content") == true)
                 {
                     if (header?.Contains("overview", StringComparison.OrdinalIgnoreCase) == true)
                     {
@@ -157,7 +162,7 @@ static async Task Process(
             }
         }
 
-        var detailsSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("details-section"));
+        var detailsSections = document.GetElementsByClassName("details-section");
         string? actualIsbn = default;
         if (detailsSections is not null)
         {
@@ -166,17 +171,17 @@ static async Task Process(
                 string? header = default;
                 foreach (var detail in detailsSection.ChildNodes)
                 {
-                    if (string.Equals(detail.Name, "h5", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(detail.NodeName, "h5", StringComparison.OrdinalIgnoreCase))
                     {
-                        header = detail.InnerText;
+                        header = detail.TextContent;
                         continue;
                     }
 
-                    if (string.Equals(detail.Name, "p", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(detail.NodeName, "p", StringComparison.OrdinalIgnoreCase))
                     {
                         if (string.Equals(header, "isbn", StringComparison.OrdinalIgnoreCase))
                         {
-                            actualIsbn = detail.InnerText.Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase);
+                            actualIsbn = detail.TextContent.Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase);
                         }
 
                         header = default;
@@ -186,13 +191,13 @@ static async Task Process(
         }
 
         string? actualGithub = default;
-        var sourceCodeSections = document.DocumentNode.Descendants("div").Where(d => d.HasClass("source-code"));
+        var sourceCodeSections = document.GetElementsByClassName("source-code");
         if (sourceCodeSections is not null)
         {
             foreach (var sourceCodeSection in sourceCodeSections.Where(node => node.HasChildNodes))
             {
-                var anchor = sourceCodeSection.ChildNodes.Single(n => string.Equals(n.Name, "a", StringComparison.Ordinal));
-                var href = anchor.GetAttributeValue("href", string.Empty);
+                var anchor = sourceCodeSection.GetElementsByTagName("a").Single();
+                var href = anchor.GetAttribute("href");
                 if (!string.IsNullOrEmpty(href))
                 {
                     actualGithub = href.Replace("https://github.com/", string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -258,45 +263,17 @@ static async Task Process(
             return !string.Equals(github, actualGitHub, StringComparison.Ordinal);
         }
 
-        static async ValueTask<string?> GetImageAsync(HttpClient client, Uri uri, HtmlAgilityPack.HtmlDocument document, CancellationToken cancellationToken)
+        static async ValueTask<string?> GetImageAsync(HttpClient client, Uri uri, AngleSharp.Html.Dom.IHtmlDocument document, CancellationToken cancellationToken)
         {
             // get the read online link
-            var readOnlineButton = document.DocumentNode
-                .Descendants("button")
-                .FirstOrDefault(d => d.HasClass("eBook_View"));
-            if (readOnlineButton is null)
-            {
-                return default;
-            }
-
-            var onClick = readOnlineButton.GetAttributeValue("onclick", default(string));
-            if (onClick is null)
-            {
-                return default;
-            }
-
-            // parse this out
-            var readOnlineUri = new Uri(uri, onClick
-                .Replace("location.href=", string.Empty, StringComparison.OrdinalIgnoreCase)
-                .Trim('\''));
-
-            var html = await client
-                .GetStringAsync(readOnlineUri, cancellationToken)
-                .ConfigureAwait(false);
-
-            document = new HtmlAgilityPack.HtmlDocument();
-            document.LoadHtml(html);
-
-            var imageNode = document.DocumentNode
-                .Descendants("img")
-                .FirstOrDefault(d => d.HasClass("img-responsive"));
+            var imageNode = document.GetElementsByClassName("img-responsive").FirstOrDefault();
 
             if (imageNode is null)
             {
                 return default;
             }
 
-            var src = imageNode.GetAttributeValue("src", def: null);
+            var src = imageNode.GetAttribute("src");
             if (src is null)
             {
                 return default;
