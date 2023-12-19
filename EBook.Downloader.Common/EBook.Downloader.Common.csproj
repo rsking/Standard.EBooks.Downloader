@@ -6,15 +6,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="AngleSharp" VersionOverride="1.0.0" />
     <PackageReference Include="IsExternalInit">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Data.Sqlite" VersionOverride="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Http" VersionOverride="2.1.0" />
-    <PackageReference Include="System.Collections.Immutable" />
-    <PackageReference Include="Lucene.Net.Analysis.Common" />
+    <PackageReference Include="System.Collections.Immutable" VersionOverride="1.2.0" />
+    <PackageReference Include="Lucene.Net.Analysis.Common" VersionOverride="4.8.0-beta00001" />
   </ItemGroup>
 
   <ItemGroup>

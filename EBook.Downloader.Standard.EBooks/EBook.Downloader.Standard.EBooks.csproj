@@ -12,7 +12,7 @@
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
     <PackageReference Include="ChronicNetCore" />
-    <PackageReference Include="HtmlAgilityPack" />
+    <PackageReference Include="Lucene.Net.Analysis.Common" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
