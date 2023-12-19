@@ -111,6 +111,7 @@ static async Task Tags(
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S2589:Boolean expressions should not be gratuitous", Justification = "False positive")]
     static (string Name, string? Character) Split(string value)
     {
         return value.IndexOf('(', StringComparison.Ordinal) switch
@@ -133,7 +134,7 @@ static async Task Description(
     CancellationToken cancellationToken)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
-    var json = await calibreDb.ListAsync(new[] { "comments", "title" }, cancellationToken: cancellationToken).ConfigureAwait(false);
+    var json = await calibreDb.ListAsync(ListDescriptionArguments, cancellationToken: cancellationToken).ConfigureAwait(false);
     if (json is null)
     {
         return;
@@ -148,7 +149,7 @@ static async Task Description(
             {
                 Console.WriteLine("{0} {1} has an empty description", GetId(item), GetTitle(item));
             }
-            else if (description?.Contains("**", StringComparison.Ordinal) == true)
+            else if (description.Contains("**", StringComparison.Ordinal))
             {
                 Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
             }
@@ -167,5 +168,17 @@ static async Task Description(
         {
             return item.GetProperty("title").GetString();
         }
+    }
+}
+
+/// <content>
+/// Members for the program.
+/// </content>
+internal sealed partial class Program
+{
+    private static readonly string[] ListDescriptionArguments = ["comments", "title"];
+
+    private Program()
+    {
     }
 }

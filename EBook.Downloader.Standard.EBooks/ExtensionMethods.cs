@@ -11,7 +11,7 @@ namespace EBook.Downloader.Standard.EBooks;
 /// </summary>
 internal static class ExtensionMethods
 {
-    private static readonly IDictionary<(Type Key, Type), System.Reflection.MethodInfo> GetGroupings = new Dictionary<(Type Key, Type Type), System.Reflection.MethodInfo>();
+    private static readonly Dictionary<(Type Key, Type), System.Reflection.MethodInfo> GetGroupings = [];
 
     /// <summary>
     /// Gets the extension for the specified URL.
@@ -55,7 +55,7 @@ internal static class ExtensionMethods
     {
         var method = GetGrouping(typeof(TKey), typeof(TElement));
 
-        var grouping = method.Invoke(source, new object?[] { key, false }) as IGrouping<TKey, TElement>;
+        var grouping = method.Invoke(source, [key, false]) as IGrouping<TKey, TElement>;
         if (grouping is not null)
         {
             values = grouping;

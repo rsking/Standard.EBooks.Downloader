@@ -101,3 +101,8 @@ dotnet_diagnostic.MA0056.severity = none
 
 # S6618: "string.Create" should be used instead of "FormattableString"
 dotnet_diagnostic.S6618.severity = none
+
+#### STYLECOP ####
+
+# SA1010: Opening square brackets should be spaced correctly
+dotnet_diagnostic.SA1010.severity = none

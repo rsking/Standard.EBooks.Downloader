@@ -9,22 +9,12 @@ namespace EBook.Downloader.Calibre;
 /// </summary>
 internal class AsyncManualResetEvent
 {
-    // Inspiration from https://devblogs.microsoft.com/pfxteam/building-async-coordination-primitives-part-1-asyncmanualresetevent/
-    // and the .net implementation of SemaphoreSlim
+    /* Inspiration from https://devblogs.microsoft.com/pfxteam/building-async-coordination-primitives-part-1-asyncmanualresetevent/ and the .net implementation of SemaphoreSlim */
 
-    /// <summary>
-    ///  The timeout in milliseconds to wait indefinitly.
-    /// </summary>
     private const int WaitIndefinitly = -1;
 
-    /// <summary>
-    /// True to run synchronous continuations on the thread which invoked Set. False to run them in the threadpool.
-    /// </summary>
     private readonly bool runSynchronousContinuationsOnSetThread;
 
-    /// <summary>
-    /// The current task completion source.
-    /// </summary>
     private volatile TaskCompletionSource<bool> completionSource = new();
 
     /// <summary>

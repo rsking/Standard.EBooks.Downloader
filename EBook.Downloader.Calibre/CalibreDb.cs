@@ -17,6 +17,16 @@ public class CalibreDb
     /// </summary>
     public const string DefaultCalibrePath = "%PROGRAMFILES%\\Calibre2";
 
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+    private const char Comma = ',';
+    private const char Space = ' ';
+    private const char Pipe = '|';
+#else
+    private const string Comma = ",";
+    private const string Space = " ";
+    private const string Pipe = "|";
+#endif
+
     private const char QuoteChar = '\"';
 
     private const string QuoteString = "\"";
@@ -93,7 +103,7 @@ public class CalibreDb
     public async Task<System.Text.Json.JsonDocument?> ListAsync(IEnumerable<string>? fields = default, string sortBy = DefaultSortBy, bool ascending = default, string? searchPattern = default, int lineWidth = DefaultLineWidth, string? separator = DefaultSeparator, string? prefix = default, int limit = DefaultLimit, CancellationToken cancellationToken = default)
     {
         var stringBuilder = new StringBuilder();
-        var fieldsValue = fields is null ? string.Empty : string.Join(",", fields);
+        var fieldsValue = fields is null ? string.Empty : string.Join(Comma, fields);
         _ = stringBuilder.AppendFormatIf(!string.IsNullOrEmpty(fieldsValue), System.Globalization.CultureInfo.InvariantCulture, " --fields={0}", fieldsValue)
             .AppendFormatIf(!string.Equals(sortBy, DefaultSortBy, StringComparison.Ordinal), System.Globalization.CultureInfo.InvariantCulture, " --sort-by={0}", sortBy)
             .AppendIf(ascending, " --ascending")
@@ -354,34 +364,41 @@ public class CalibreDb
     public async Task<Opf.Package> ShowMetadataAsync(int id, CancellationToken cancellationToken = default)
     {
         const int BufferSize = 4096;
-        using var memoryStream = new MemoryStream(BufferSize);
-        var writer = new StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true);
+        var memoryStream = new MemoryStream(BufferSize);
 #if NETSTANDARD2_0
-        using (writer)
+        using (memoryStream)
 #else
-        await using (writer.ConfigureAwait(false))
+        await using (memoryStream.ConfigureAwait(false))
 #endif
         {
-            await this.ExecuteCalibreDbAsync(
-                "show_metadata",
-                FormattableString.Invariant($"{id} --as-opf"),
-                data =>
-                {
-                    if (Preprocess(data) is string value)
+            var writer = new StreamWriter(memoryStream, Encoding.UTF8, BufferSize, leaveOpen: true);
+#if NETSTANDARD2_0
+            using (writer)
+#else
+            await using (writer.ConfigureAwait(false))
+#endif
+            {
+                await this.ExecuteCalibreDbAsync(
+                    "show_metadata",
+                    FormattableString.Invariant($"{id} --as-opf"),
+                    data =>
                     {
-                        writer.WriteLine(value);
-                    }
-                },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
+                        if (Preprocess(data) is string value)
+                        {
+                            writer.WriteLine(value);
+                        }
+                    },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
 
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return new Opf.Package();
-        }
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return new Opf.Package();
+            }
 
-        memoryStream.Position = 0;
-        return this.xmlSerializer.Deserialize(memoryStream) as Opf.Package ?? throw new InvalidOperationException("Failed to deserialize OPF payload");
+            memoryStream.Position = 0;
+            return this.xmlSerializer.Deserialize(memoryStream) as Opf.Package ?? throw new InvalidOperationException("Failed to deserialize OPF payload");
+        }
     }
 
     /// <summary>
@@ -458,8 +475,7 @@ public class CalibreDb
                         tagName,
                         count,
                         rating)
-                    : throw new InvalidOperationException($"Failed to extract category from {string.Join("|", values)}");
-
+                    : throw new InvalidOperationException($"Failed to extract category from {string.Join(Pipe, values)}");
                 values = default;
             }
 
@@ -710,7 +726,7 @@ public class CalibreDb
             .AppendIf(title is not null, () => FormattableString.Invariant($" --title={QuoteIfRequired(title)}"))
             .AppendIf(authors is not null, () => FormattableString.Invariant($" --authors={QuoteIfRequired(authors)}"))
             .AppendIf(isbn is not null, () => FormattableString.Invariant($" --isbn={QuoteIfRequired(isbn)}"))
-            .AppendIf(identifiers is not null, () => string.Join(" ", identifiers!.Select(identifier => FormattableString.Invariant($" --identifier={identifier}"))))
+            .AppendIf(identifiers is not null, () => string.Join(Space, identifiers!.Select(identifier => FormattableString.Invariant($" --identifier={identifier}"))))
             .AppendIf(tags is not null, () => FormattableString.Invariant($" --tags={QuoteIfRequired(tags)}"))
             .AppendIf(series is not null, () => FormattableString.Invariant($" --series={QuoteIfRequired(series)}"))
             .AppendIf(seriesIndex != -1, () => FormattableString.Invariant($" --series_index={seriesIndex}"))

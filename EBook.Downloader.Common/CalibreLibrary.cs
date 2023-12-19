@@ -537,6 +537,7 @@ public class CalibreLibrary : IDisposable
 
             return Join(ToProperCase(name)!.Replace(" and ", " & "), ToProperCase(character));
 
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S2589:Boolean expressions should not be gratuitous", Justification = "False positive")]
             static (string Name, string? Character) Split(string value)
             {
                 return value.IndexOf('(') switch

@@ -18,11 +18,8 @@ using NeoSmart.Caching.Sqlite.AspNetCore;
 using Serilog;
 
 const int SentinelRetryCount = 30;
-
 const int SentinelRetryWait = 100;
-
 const int MaxTimeOffset = 180;
-
 #pragma warning disable S1075 // URIs should not be hardcoded
 const string AtomUrl = "https://standardebooks.org/feeds/atom/new-releases";
 #pragma warning restore S1075 // URIs should not be hardcoded
@@ -188,7 +185,7 @@ static async Task Download(
 
     if (!File.Exists(sentinelPath))
     {
-        await File.WriteAllBytesAsync(sentinelPath, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(sentinelPath, [], cancellationToken).ConfigureAwait(false);
         File.SetLastWriteTimeUtc(sentinelPath, DateTime.UnixEpoch);
     }
 
@@ -302,16 +299,17 @@ static async Task Download(
 
     static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri, CancellationToken cancellationToken)
     {
-        var bytes = await cache.GetAsync("atom", cancellationToken).ConfigureAwait(false);
+        var bytes = await cache.GetAsync(Atom, cancellationToken).ConfigureAwait(false);
         if (bytes is null)
         {
             var client = httpClientFactory.CreateClient();
             bytes = await client.GetByteArrayAsync(uri, cancellationToken).ConfigureAwait(false);
-            await cache.SetAsync("atom", bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) }, cancellationToken).ConfigureAwait(false);
+            await cache.SetAsync(Atom, bytes, new DistributedCacheEntryOptions { SlidingExpiration = TimeSpan.FromHours(1) }, cancellationToken).ConfigureAwait(false);
         }
 
         var atom = new System.ServiceModel.Syndication.Atom10FeedFormatter();
-        using (var stream = new MemoryStream(bytes))
+        var stream = new MemoryStream(bytes);
+        await using (stream.ConfigureAwait(false))
         {
             using var xml = System.Xml.XmlReader.Create(stream);
             atom.ReadFrom(xml);
@@ -330,7 +328,7 @@ static async Task Download(
         CancellationToken cancellationToken)
     {
         var book = await calibreLibrary
-            .GetBookByIdentifierAndExtensionAsync(item.Id, "url", extension, cancellationToken)
+            .GetBookByIdentifierAndExtensionAsync(item.Id, Url, extension, cancellationToken)
             .ConfigureAwait(false);
 
         DateTime lastWriteTimeUtc = default;
@@ -378,7 +376,7 @@ static async Task Metadata(
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
         programLogger.LogInformation("Processing book {Title}", book.Name);
-        var filePath = book.GetFullPath(calibreLibrary.Path, ".epub");
+        var filePath = book.GetFullPath(calibreLibrary.Path, EpubExtension);
         if (File.Exists(filePath))
         {
             var epub = EpubInfo.Parse(filePath, parseDescription: true);
@@ -417,9 +415,9 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
 
     async static Task<System.Xml.XmlElement> UpdateLongDescriptionAsync(System.Xml.XmlElement longDescription, CalibreLibrary calibreLibrary, ILookup<string, string> authors, ILookup<string, string> series, ILookup<string, string> sets, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
-        var bookRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)/(?<book>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-        var authorRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
-        var collectionsRegex = new System.Text.RegularExpressions.Regex("https://standardebooks.org/collections/(?<collection>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
+        var bookRegex = BookRegex();
+        var authorRegex = AuthorRegex();
+        var collectionsRegex = CollectionsRegex();
 
         // update the description with internal links
         var document = await Parser.ParseDocumentAsync(longDescription.OuterXml, cancellationToken).ConfigureAwait(false);
@@ -440,7 +438,7 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     }
 
                     logger.LogDebug("Looking up link to {Uri}", uri);
-                    if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier("url", uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
+                    if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier(Url, uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
                     {
                         anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
                         updated = true;
@@ -455,10 +453,10 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     logger.LogDebug("Found author URI");
 
                     // set this to seach for the author
-                    var authorGroup = authorRegex.Match(uri).Groups["author"];
+                    var authorGroup = authorRegex.Match(uri).Groups[Author];
                     if (authors.TryGetValues(Strip(authorGroup.Value), out var author))
                     {
-                        var search = $"author:\"={author.First()}\"";
+                        var search = $"{Author}:\"={author.First()}\"";
                         anchor.Href = string.Concat("calibre://search/_?eq=", ConvertStringToHex(search, System.Text.Encoding.UTF8));
                         updated = true;
                     }
@@ -559,7 +557,7 @@ static async Task Update(
     // get all the books from standard e-books
     await foreach (var book in calibreLibrary.GetBooksByPublisherAsync("Standard Ebooks", cancellationToken).ConfigureAwait(false))
     {
-        if (book.Identifiers.TryGetValue("url", out var uriValue) && uriValue is Uri uri)
+        if (book.Identifiers.TryGetValue(Url, out var uriValue) && uriValue is Uri uri)
         {
             await foreach (var bookUri in GetBookUris(programLogger, parser, uri, httpClientFactory, cancellationToken).ConfigureAwait(false))
             {
@@ -577,12 +575,12 @@ static async Task Update(
 
         static bool IsValidEpub(Uri uri)
         {
-            return uri.PathAndQuery.EndsWith("_advanced.epub", StringComparison.OrdinalIgnoreCase) || uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase);
+            return uri.PathAndQuery.EndsWith($"_advanced{EpubExtension}", StringComparison.OrdinalIgnoreCase) || uri.PathAndQuery.EndsWith($"{KepubExtension}{EpubExtension}", StringComparison.OrdinalIgnoreCase);
         }
 
         static string GetExtension(Uri uri)
         {
-            return uri.PathAndQuery.EndsWith(".kepub.epub", StringComparison.OrdinalIgnoreCase) ? ".kepub" : ".epub";
+            return uri.PathAndQuery.EndsWith($"{KepubExtension}{EpubExtension}", StringComparison.OrdinalIgnoreCase) ? KepubExtension : EpubExtension;
         }
     }
 
@@ -769,7 +767,7 @@ static async Task<DateTime> GetLastWriteTime(
 
 static bool IsKePub(string extension)
 {
-    return string.Equals(extension, ".kepub", StringComparison.InvariantCultureIgnoreCase);
+    return string.Equals(extension, KepubExtension, StringComparison.InvariantCultureIgnoreCase);
 }
 
 static ILookup<string, string> Sanitize(IEnumerable<string> value)
@@ -807,7 +805,7 @@ static void CheckForNonAscii(ILookup<string, string> values)
 
 static async Task<IEnumerable<string>> GetAuthorsAsync(EBook.Downloader.Calibre.CalibreDb calibreDb, CancellationToken cancellationToken = default)
 {
-    return GetEnumerable(await calibreDb.ListAsync(fields: new string[] { "authors" }, sortBy: "authors", cancellationToken: cancellationToken).ConfigureAwait(false))
+    return GetEnumerable(await calibreDb.ListAsync(fields: ListAuthorsArguments, sortBy: Authors, cancellationToken: cancellationToken).ConfigureAwait(false))
         .Distinct(StringComparer.OrdinalIgnoreCase);
 
     static IEnumerable<string> GetEnumerable(System.Text.Json.JsonDocument? document)
@@ -819,7 +817,7 @@ static async Task<IEnumerable<string>> GetAuthorsAsync(EBook.Downloader.Calibre.
 
         foreach (var element in document.RootElement.EnumerateArray())
         {
-            if (element.TryGetProperty("authors", out var authorElement)
+            if (element.TryGetProperty(Authors, out var authorElement)
                 && authorElement.GetString() is string authors)
             {
                 foreach (var author in authors.Split('&'))
@@ -836,9 +834,32 @@ static async Task<IEnumerable<string>> GetAuthorsAsync(EBook.Downloader.Calibre.
 /// </content>
 internal sealed partial class Program
 {
+    private const string Author = "author";
+
+    private const string Authors = "authors";
+
+    private const string Atom = "atom";
+
+    private const string EpubExtension = ".epub";
+
+    private const string KepubExtension = ".kepub";
+
+    private const string Url = "url";
+
     private static readonly AngleSharp.Html.Parser.HtmlParser Parser = new();
+
+    private static readonly string[] ListAuthorsArguments = [Authors];
 
     private Program()
     {
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)/(?<book>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, 1000)]
+    private static partial System.Text.RegularExpressions.Regex BookRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex("https://standardebooks.org/ebooks/(?<author>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, 1000)]
+    private static partial System.Text.RegularExpressions.Regex AuthorRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex("https://standardebooks.org/collections/(?<collection>[-a-z0-9]+)", System.Text.RegularExpressions.RegexOptions.ExplicitCapture, 1000)]
+    private static partial System.Text.RegularExpressions.Regex CollectionsRegex();
 }

@@ -11,6 +11,8 @@ namespace EBook.Downloader.Common;
 /// </summary>
 public record class EpubInfo
 {
+    private static readonly char[] ColonSeparator = [':'];
+
     /// <summary>
     /// Gets the authors.
     /// </summary>
@@ -170,7 +172,7 @@ public record class EpubInfo
                 yield break;
             }
 
-            var split = identifier.InnerText.Split(new[] { ':' }, 2);
+            var split = identifier.InnerText.Split(ColonSeparator, 2);
             yield return (split[0], split[1]);
         }
 
