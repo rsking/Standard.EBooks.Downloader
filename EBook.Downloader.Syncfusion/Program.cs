@@ -51,7 +51,12 @@ static async Task Process(
 {
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer, logger);
-    var list = await calibreDb.ListAsync(fields: new[] { "id", "title", "identifiers", "comments" }, searchPattern: "series:\"=Succinctly\"", cancellationToken: cancellationToken).ConfigureAwait(false);
+    var list = await calibreDb.ListAsync(
+        fields: new[] { "id", "title", "identifiers", "comments" },
+        sortBy: "series_index",
+        ascending: true,
+        searchPattern: "series:\"=Succinctly\"",
+        cancellationToken: cancellationToken).ConfigureAwait(false);
 
     if (list is null)
     {
