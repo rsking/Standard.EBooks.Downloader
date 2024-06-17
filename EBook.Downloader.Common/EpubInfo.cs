@@ -16,7 +16,7 @@ public record class EpubInfo
     /// <summary>
     /// Gets the authors.
     /// </summary>
-    public IEnumerable<string> Authors { get; init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Authors { get; init; } = [];
 
     /// <summary>
     /// Gets the title.
@@ -36,12 +36,12 @@ public record class EpubInfo
     /// <summary>
     /// Gets the publishers.
     /// </summary>
-    public IEnumerable<string> Publishers { get; init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Publishers { get; init; } = [];
 
     /// <summary>
     /// Gets the tags.
     /// </summary>
-    public IEnumerable<string> Tags { get; init; } = Enumerable.Empty<string>();
+    public IEnumerable<string> Tags { get; init; } = [];
 
     /// <summary>
     /// Gets the identifiers.
@@ -61,7 +61,7 @@ public record class EpubInfo
     /// <summary>
     /// Gets the collections.
     /// </summary>
-    public IEnumerable<EpubCollection> Collections { get; init; } = Enumerable.Empty<EpubCollection>();
+    public IEnumerable<EpubCollection> Collections { get; init; } = [];
 
     /// <summary>
     /// Gets the path.

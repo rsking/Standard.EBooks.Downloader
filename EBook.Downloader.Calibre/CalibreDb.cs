@@ -155,7 +155,7 @@ public class CalibreDb
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The book ID.</returns>
-    public async Task<int> AddEmptyAsync(CancellationToken cancellationToken = default) => (await this.AddAsync(Enumerable.Empty<FileInfo>(), empty: true, cancellationToken: cancellationToken).ConfigureAwait(false)).Single();
+    public async Task<int> AddEmptyAsync(CancellationToken cancellationToken = default) => (await this.AddAsync([], empty: true, cancellationToken: cancellationToken).ConfigureAwait(false)).Single();
 
     /// <summary>
     /// Performs the 'add' function.
@@ -177,7 +177,7 @@ public class CalibreDb
     public async Task<int> AddAsync(FileInfo file, bool duplicates = false, AutoMerge autoMerge = default, string? title = default, string? authors = default, string? isbn = default, IEnumerable<Identifier>? identifiers = default, string? tags = default, string? series = default, int seriesIndex = -1, string? cover = default, string? languages = default, CancellationToken cancellationToken = default)
     {
         var results = await this.AddAsync(
-            new[] { file },
+            [file],
             duplicates,
             autoMerge,
             empty: false,
@@ -273,7 +273,7 @@ public class CalibreDb
     /// <param name="value">The value.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public Task SetMetadataAsync(int id, StandardField field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
+    public Task SetMetadataAsync(int id, StandardField field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, [value], cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.
@@ -283,7 +283,7 @@ public class CalibreDb
     /// <param name="value">The value.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The task.</returns>
-    public Task SetMetadataAsync(int id, string field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, new[] { value }, cancellationToken);
+    public Task SetMetadataAsync(int id, string field, object? value, CancellationToken cancellationToken = default) => this.SetMetadataAsync(id, field, [value], cancellationToken);
 
     /// <summary>
     /// Performs the 'set_metadata' function.

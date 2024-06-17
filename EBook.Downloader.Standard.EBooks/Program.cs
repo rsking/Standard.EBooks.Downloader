@@ -730,7 +730,7 @@ static IEnumerable<System.Text.RegularExpressions.Regex> GetRegexFromFile(FileIn
 {
     return input?.Exists == true
         ? ReadFromFile(input.FullName)
-        : Array.Empty<System.Text.RegularExpressions.Regex>();
+        : [];
 
     IEnumerable<System.Text.RegularExpressions.Regex> ReadFromFile(string path)
     {

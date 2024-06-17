@@ -14,8 +14,8 @@ internal static class Words
     /// <summary>
     /// Words that should be lower case.
     /// </summary>
-    public static readonly IEnumerable<string> LowerCase = new[]
-    {
+    public static readonly IEnumerable<string> LowerCase =
+    [
         "a",
         "for",
         "of",
@@ -30,5 +30,5 @@ internal static class Words
         "to",
         "ca.",
         "into",
-    };
+    ];
 }

@@ -52,7 +52,7 @@ static async Task Process(
     var logger = host.Services.GetRequiredService<ILogger<CalibreDb>>();
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer, logger);
     var list = await calibreDb.ListAsync(
-        fields: new[] { "id", "title", "identifiers", "comments" },
+        fields: Fields,
         sortBy: "series_index",
         ascending: true,
         searchPattern: "series:\"=Succinctly\"",
@@ -302,5 +302,17 @@ static async Task Process(
 
             return fileName;
         }
+    }
+}
+
+/// <content>
+/// The local elements.
+/// </content>
+internal sealed partial class Program
+{
+    private static readonly string[] Fields = ["id", "title", "identifiers", "comments"];
+
+    private Program()
+    {
     }
 }
