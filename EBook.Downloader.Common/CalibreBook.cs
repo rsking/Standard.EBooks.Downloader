@@ -111,8 +111,7 @@ public record class CalibreBook
     /// <returns>The file info for the book.</returns>
     public string GetFullPath(string path, string extension)
     {
-        var paths = GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension));
-        return System.IO.Path.Combine(paths.ToArray());
+        return System.IO.Path.Combine(GetEnumerable(path).Concat(GetPathsSegments(this.Path)).Concat(GetEnumerable(this.Name + extension)).ToArray());
 
         static IEnumerable<string> GetEnumerable(string value)
         {

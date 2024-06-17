@@ -121,7 +121,7 @@ public class CalibreDb
             command,
             data =>
             {
-                if (Preprocess(data) is string value)
+                if (Preprocess(data) is { } value)
                 {
                     _ = stringBuilder.Append(value);
                 }
@@ -231,7 +231,7 @@ public class CalibreDb
             searchExpression,
             data =>
             {
-                if (Preprocess(data) is string { Length: > 0 } processedData)
+                if (Preprocess(data) is { Length: > 0 } processedData)
                 {
                     foreach (var result in processedData.Split(',').Select(value => value.Trim()).Select(value => int.Parse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture)))
                     {
@@ -383,7 +383,7 @@ public class CalibreDb
                     FormattableString.Invariant($"{id} --as-opf"),
                     data =>
                     {
-                        if (Preprocess(data) is string value)
+                        if (Preprocess(data) is { } value)
                         {
                             writer.WriteLine(value);
                         }
@@ -418,7 +418,7 @@ public class CalibreDb
             "--csv",
             data =>
             {
-                if (Preprocess(data) is string value)
+                if (Preprocess(data) is { } value)
                 {
                     if (!hasHeader)
                     {
@@ -467,7 +467,7 @@ public class CalibreDb
                 CleanValues(values);
 
                 yield return Enum.TryParse<CategoryType>(values[0]?.Trim('#'), ignoreCase: true, out var categoryType)
-                    && values[1] is string tagName
+                    && values[1] is { } tagName
                     && int.TryParse(values[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count)
                     && float.TryParse(values[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var rating)
                     ? new Category(
@@ -695,14 +695,12 @@ public class CalibreDb
     private static string Serialize(StandardField field)
     {
         var type = typeof(StandardField);
-        var name = Enum.GetName(type, field);
-        if (name is null)
+        if (Enum.GetName(type, field) is not { } name)
         {
             return field.ToString();
         }
 
-        var fieldInfo = type.GetField(name);
-        if (fieldInfo is null)
+        if (type.GetField(name) is not { } fieldInfo)
         {
             return name.ToLowerInvariant();
         }
@@ -746,7 +744,7 @@ public class CalibreDb
             stringBuilder.ToString(),
             data =>
             {
-                if (Preprocess(data) is string { Length: > 0 } line && line.StartsWith("Added book ids", StringComparison.Ordinal))
+                if (Preprocess(data) is { Length: > 0 } line && line.StartsWith("Added book ids", StringComparison.Ordinal))
                 {
                     line =
 #if NETSTANDARD2_0
@@ -789,29 +787,25 @@ public class CalibreDb
 
         process.OutputDataReceived += (sender, args) =>
         {
-            if (args?.Data is null)
+            if (args is { Data: { } data })
             {
-                return;
-            }
-
-            if (outputDataReceived is not null)
-            {
-                outputDataReceived(args.Data);
-            }
-            else
-            {
-                this.logger.LogInformation(0, "{Data}", args.Data);
+                if (outputDataReceived is not null)
+                {
+                    outputDataReceived(data);
+                }
+                else
+                {
+                    this.logger.LogInformation(0, "{Data}", data);
+                }
             }
         };
 
         process.ErrorDataReceived += (sender, args) =>
         {
-            if (args?.Data is null)
+            if (args is { Data: { } data })
             {
-                return;
+                this.logger.LogError(0, "{Data}", data);
             }
-
-            this.logger.LogError(0, "{Data}", args.Data);
         };
 
         process.Exited += (sender, args) =>

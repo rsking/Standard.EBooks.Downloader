@@ -123,7 +123,9 @@ static async Task Tags(
 
     static string Join(string name, string? character)
     {
-        return character is null ? name : $"{name} {character}";
+        return character is null
+            ? name
+            : $"{name} {character}";
     }
 }
 
@@ -134,39 +136,36 @@ static async Task Description(
     CancellationToken cancellationToken)
 {
     var calibreDb = new CalibreDb(calibreLibraryPath.FullName, useContentServer: useContentServer, host.Services.GetRequiredService<ILogger<CalibreDb>>());
-    var json = await calibreDb.ListAsync(ListDescriptionArguments, cancellationToken: cancellationToken).ConfigureAwait(false);
-    if (json is null)
+    if (await calibreDb.ListAsync(ListDescriptionArguments, cancellationToken: cancellationToken).ConfigureAwait(false) is { } json)
     {
-        return;
-    }
-
-    foreach (var item in json.RootElement.EnumerateArray())
-    {
-        if (item.TryGetProperty("comments", out var descriptionProperty))
+        foreach (var item in json.RootElement.EnumerateArray())
         {
-            var description = descriptionProperty.GetString();
-            if (string.IsNullOrEmpty(description))
+            if (item.TryGetProperty("comments", out var descriptionProperty))
             {
-                Console.WriteLine("{0} {1} has an empty description", GetId(item), GetTitle(item));
+                var description = descriptionProperty.GetString();
+                if (string.IsNullOrEmpty(description))
+                {
+                    Console.WriteLine("{0} {1} has an empty description", GetId(item), GetTitle(item));
+                }
+                else if (description.Contains("**", StringComparison.Ordinal))
+                {
+                    Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
+                }
             }
-            else if (description.Contains("**", StringComparison.Ordinal))
+            else
             {
-                Console.WriteLine("{0} {1} has '**' in the description", GetId(item), GetTitle(item));
+                Console.WriteLine("{0} {1} has no description", GetId(item), GetTitle(item));
             }
-        }
-        else
-        {
-            Console.WriteLine("{0} {1} has no description", GetId(item), GetTitle(item));
-        }
 
-        static int GetId(System.Text.Json.JsonElement item)
-        {
-            return item.GetProperty("id").GetInt32();
-        }
+            static int GetId(System.Text.Json.JsonElement item)
+            {
+                return item.GetProperty("id").GetInt32();
+            }
 
-        static string? GetTitle(System.Text.Json.JsonElement item)
-        {
-            return item.GetProperty("title").GetString();
+            static string? GetTitle(System.Text.Json.JsonElement item)
+            {
+                return item.GetProperty("title").GetString();
+            }
         }
     }
 }

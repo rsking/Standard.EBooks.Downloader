@@ -121,8 +121,7 @@ public record class EpubInfo
 
         static IEnumerable<string> GetPublishers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var publisher = document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager);
-            if (publisher is not null)
+            if (document.SelectSingleNode("/x:package/x:metadata/dc:publisher[@id='publisher']", manager) is { } publisher)
             {
                 yield return publisher.InnerText;
                 yield break;
@@ -136,8 +135,7 @@ public record class EpubInfo
 
         static IEnumerable<string> GetAuthors(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var author = document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager);
-            if (author is not null)
+            if (document.SelectSingleNode("/x:package/x:metadata/dc:creator[@id='author']", manager) is { } author)
             {
                 yield return author.InnerText;
                 yield break;
@@ -151,8 +149,7 @@ public record class EpubInfo
 
         static IEnumerable<string> GetTags(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var collection = document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager);
-            if (collection is not null)
+            if (document.SelectSingleNode("/x:package/x:metadata/dc:subject[@id='subject']", manager) is { } collection)
             {
                 yield return collection.InnerText;
                 yield break;
@@ -166,24 +163,21 @@ public record class EpubInfo
 
         static IEnumerable<(string Key, string Value)> GetIdentifiers(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var identifier = document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager);
-            if (identifier is null)
+            if (document.SelectSingleNode("/x:package/x:metadata/dc:identifier[@id='uid']", manager) is { } identifier)
             {
-                yield break;
+                var split = identifier.InnerText.Split(ColonSeparator, 2);
+                yield return (split[0], split[1]);
             }
-
-            var split = identifier.InnerText.Split(ColonSeparator, 2);
-            yield return (split[0], split[1]);
         }
 
         static (string? Description, System.Xml.XmlElement? LongDescription) GetDescription(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText ?? default;
+            var description = document.SelectSingleNode("/x:package/x:metadata/dc:description[@id='description']", manager)?.InnerText;
             System.Xml.XmlElement? longDescription = default;
-            if (document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager) is System.Xml.XmlNode node && node.InnerText is not null)
+            if (document.SelectSingleNode("/x:package/x:metadata/x:meta[@id='long-description']", manager) is { InnerText: { } innerText })
             {
                 longDescription = document.CreateElement("div");
-                longDescription.InnerXml = node.InnerText.Replace("\t", string.Empty);
+                longDescription.InnerXml = innerText.Replace("\t", string.Empty);
             }
 
             return (description, longDescription);
@@ -191,26 +185,23 @@ public record class EpubInfo
 
         static IEnumerable<EpubCollection> GetCollections(System.Xml.XmlDocument document, System.Xml.XmlNamespaceManager manager)
         {
-            var nodes = document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager);
-            if (nodes is null)
+            if (document.SelectNodes("/x:package/x:metadata/x:meta[@property='belongs-to-collection']", manager) is { } nodes)
             {
-                yield break;
-            }
+                foreach (var node in nodes.OfType<System.Xml.XmlNode>())
+                {
+                    var id = node.Attributes["id"].Value;
+                    var name = node.InnerText;
 
-            foreach (var node in nodes.OfType<System.Xml.XmlNode>())
-            {
-                var id = node.Attributes["id"].Value;
-                var name = node.InnerText;
+                    var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is { InnerText: { } collectionInnerText }
+                        ? (EpubCollectionType)Enum.Parse(typeof(EpubCollectionType), collectionInnerText, ignoreCase: true)
+                        : EpubCollectionType.None;
 
-                var collectionType = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='collection-type']", manager) is System.Xml.XmlNode collectionTypeNode && collectionTypeNode.InnerText is not null
-                    ? (EpubCollectionType)Enum.Parse(typeof(EpubCollectionType), collectionTypeNode.InnerText, ignoreCase: true)
-                    : EpubCollectionType.None;
+                    var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is { InnerText: { } groupInnerText }
+                        ? int.Parse(groupInnerText, System.Globalization.CultureInfo.InvariantCulture)
+                        : 0;
 
-                var groupPosition = document.SelectSingleNode($"/x:package/x:metadata/x:meta[@refines='#{id}' and @property='group-position']", manager) is System.Xml.XmlNode groupPositionNode && groupPositionNode.InnerText is not null
-                    ? int.Parse(groupPositionNode.InnerText, System.Globalization.CultureInfo.InvariantCulture)
-                    : 0;
-
-                yield return new EpubCollection(id, name, collectionType, groupPosition);
+                    yield return new EpubCollection(id, name, collectionType, groupPosition);
+                }
             }
         }
 

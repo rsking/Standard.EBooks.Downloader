@@ -72,17 +72,17 @@ static async Task Process(
         string? gitHub = default;
         if (element.TryGetProperty("identifiers", out var identifiersElement))
         {
-            if (identifiersElement.TryGetProperty("uri", out var uriElement) && uriElement.GetString() is string uriString)
+            if (identifiersElement.TryGetProperty("uri", out var uriElement) && uriElement.GetString() is { } uriString)
             {
                 uri = new Uri(uriString);
             }
 
-            if (identifiersElement.TryGetProperty("isbn", out var isbnElement) && isbnElement.GetString() is string isbnString)
+            if (identifiersElement.TryGetProperty("isbn", out var isbnElement) && isbnElement.GetString() is { } isbnString)
             {
                 isbn = isbnString;
             }
 
-            if (identifiersElement.TryGetProperty("github", out var gitHubElement) && gitHubElement.GetString() is string gitHubString)
+            if (identifiersElement.TryGetProperty("github", out var gitHubElement) && gitHubElement.GetString() is { } gitHubString)
             {
                 gitHub = gitHubString;
             }
@@ -128,20 +128,25 @@ static async Task Process(
             document = await parser.ParseDocumentAsync(stream, cancellationToken).ConfigureAwait(false);
         }
 
-        var tabSections = document.GetElementsByClassName("tab-section");
+        if (document.GetElementById("Error") is not null)
+        {
+            logger.LogError("Could not retreive {URI} because of Error", uri);
+            continue;
+        }
+
         string? actualDescription = default;
-        if (tabSections is not null)
+        if (document.GetElementsByClassName("tab-section") is { Length: > 0 } tabSections)
         {
             string? header = default;
             foreach (var tabSection in tabSections.SelectMany(tabSection => tabSection.GetElementsByTagName("div")))
             {
-                if (tabSection.ClassName?.Contains("tab__title") == true)
+                if (tabSection.ClassName?.Contains("tab__title", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     header = tabSection.TextContent;
                     continue;
                 }
 
-                if (tabSection.ClassName?.Contains("tab__content") == true)
+                if (tabSection.ClassName?.Contains("tab__content", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     if (header?.Contains("overview", StringComparison.OrdinalIgnoreCase) == true)
                     {
@@ -167,9 +172,8 @@ static async Task Process(
             }
         }
 
-        var detailsSections = document.GetElementsByClassName("details-section");
         string? actualIsbn = default;
-        if (detailsSections is not null)
+        if (document.GetElementsByClassName("details-section") is { Length: > 0 } detailsSections)
         {
             foreach (var detailsSection in detailsSections.Where(node => node.HasChildNodes))
             {
@@ -196,8 +200,7 @@ static async Task Process(
         }
 
         string? actualGithub = default;
-        var sourceCodeSections = document.GetElementsByClassName("source-code");
-        if (sourceCodeSections is not null)
+        if (document.GetElementsByClassName("source-code") is { Length: > 0 } sourceCodeSections)
         {
             foreach (var sourceCodeSection in sourceCodeSections.Where(node => node.HasChildNodes))
             {
@@ -271,15 +274,12 @@ static async Task Process(
         static async ValueTask<string?> GetImageAsync(HttpClient client, Uri uri, AngleSharp.Html.Dom.IHtmlDocument document, CancellationToken cancellationToken)
         {
             // get the read online link
-            var imageNode = document.GetElementsByClassName("img-responsive").FirstOrDefault();
-
-            if (imageNode is null)
+            if (document.GetElementsByClassName("img-responsive").FirstOrDefault() is not { } imageNode)
             {
                 return default;
             }
 
-            var src = imageNode.GetAttribute("src");
-            if (src is null)
+            if (imageNode.GetAttribute("src") is not { } src)
             {
                 return default;
             }

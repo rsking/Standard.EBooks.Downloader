@@ -299,8 +299,7 @@ static async Task Download(
 
     static async Task<System.ServiceModel.Syndication.Atom10FeedFormatter> GetAtomAsync(IDistributedCache cache, IHttpClientFactory httpClientFactory, Uri uri, CancellationToken cancellationToken)
     {
-        var bytes = await cache.GetAsync(Atom, cancellationToken).ConfigureAwait(false);
-        if (bytes is null)
+        if (await cache.GetAsync(Atom, cancellationToken).ConfigureAwait(false) is not { } bytes)
         {
             var client = httpClientFactory.CreateClient();
             bytes = await client.GetByteArrayAsync(uri, cancellationToken).ConfigureAwait(false);
@@ -327,27 +326,23 @@ static async Task Download(
         int maxTimeOffset,
         CancellationToken cancellationToken)
     {
-        var book = await calibreLibrary
+        if (await calibreLibrary
             .GetBookByIdentifierAndExtensionAsync(item.Id, Url, extension, cancellationToken)
-            .ConfigureAwait(false);
-
-        DateTime lastWriteTimeUtc = default;
-        if (book is not null)
+            .ConfigureAwait(false) is { } book)
         {
-            lastWriteTimeUtc = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
+            var lastWriteTimeUtc = await GetLastWriteTime(calibreLibrary, book, extension, maxTimeOffset, cancellationToken).ConfigureAwait(false);
 
             if (lastWriteTimeUtc == default)
             {
                 // book should exist here!
                 programLogger.LogError("Failed to find {Title} - {Name} - {Extension}", item.Title.Text, name, extension.TrimStart('.'));
             }
-        }
-        else
-        {
-            programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
+
+            return lastWriteTimeUtc;
         }
 
-        return lastWriteTimeUtc;
+        programLogger.LogInformation("{Title} - {Name} - {Extension} does not exist in Calibre", item.Title.Text, name, extension.TrimStart('.'));
+        return default;
     }
 }
 
@@ -383,6 +378,10 @@ static async Task Metadata(
             epub = await UpdateEpubInfoAsync(epub, calibreLibrary, forcedSeriesEnumerable, forcedSetsEnumerable, authors, series, sets, programLogger, cancellationToken).ConfigureAwait(false);
             await calibreLibrary.UpdateAsync(book, epub, maxTimeOffset, cancellationToken).ConfigureAwait(false);
         }
+        else
+        {
+            programLogger.LogWarning("Failed to find book at {Path}", filePath);
+        }
     }
 }
 
@@ -397,11 +396,9 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
     Microsoft.Extensions.Logging.ILogger logger,
     CancellationToken cancellationToken)
 {
-    System.Xml.XmlElement? longDescription = default;
-    if (epub.LongDescription is not null)
-    {
-        longDescription = await UpdateLongDescriptionAsync(epub.LongDescription, calibreLibrary, authors, series, sets, logger, cancellationToken).ConfigureAwait(false);
-    }
+    var longDescription = epub is { LongDescription: { } epubLongDescription }
+        ? await UpdateLongDescriptionAsync(epubLongDescription, calibreLibrary, authors, series, sets, logger, cancellationToken).ConfigureAwait(false)
+        : default;
 
     // update the sets and series
     var collections = epub.Collections.Select(collection => collection switch
@@ -425,7 +422,7 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
         var updated = false;
         foreach (var anchor in document.GetElementsByTagName("a").OfType<AngleSharp.Html.Dom.IHtmlAnchorElement>())
         {
-            if (anchor.Href is string uri)
+            if (anchor.Href is { } uri)
             {
                 if (bookRegex.IsMatch(uri))
                 {
@@ -438,7 +435,7 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
                     }
 
                     logger.LogDebug("Looking up link to {Uri}", uri);
-                    if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier(Url, uri), cancellationToken).ConfigureAwait(false) is CalibreBook book)
+                    if (await calibreLibrary.GetCalibreBookAsync(new EBook.Downloader.Calibre.Identifier(Url, uri), cancellationToken).ConfigureAwait(false) is { } book)
                     {
                         anchor.Href = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"calibre://show-book/_/{book.Id}");
                         updated = true;
@@ -519,7 +516,7 @@ static async Task<EpubInfo> UpdateEpubInfoAsync(
             }
         }
 
-        if (updated && document.Body?.FirstChild?.ToHtml() is string html)
+        if (updated && document.Body?.FirstChild?.ToHtml() is { } html)
         {
             var doc = new System.Xml.XmlDocument();
             doc.LoadXml(html);
@@ -617,11 +614,9 @@ static async Task Update(
             .Concat(document.GetElementsByClassName("kobo"))
             .Select(element => element.Attributes))
         {
-            if (attributes.GetNamedItem("property") is AngleSharp.Dom.IAttr propertyAttribute
-                && propertyAttribute.Value is string propertyAttributeValue
-                && string.Equals(propertyAttributeValue, "schema:contentUrl", StringComparison.Ordinal)
-                && attributes["href"] is AngleSharp.Dom.IAttr hrefAttribute
-                && Uri.TryCreate(hrefAttribute.Value, UriKind.RelativeOrAbsolute, out var uri))
+            if (attributes.GetNamedItem("property") is { Value: "schema:contentUrl" }
+                && attributes["href"] is { Value: { } stringUri }
+                && Uri.TryCreate(stringUri, UriKind.RelativeOrAbsolute, out var uri))
             {
                 yield return uri.IsAbsoluteUri
                     ? uri
@@ -679,49 +674,47 @@ static async Task DownloadIfRequired(
             }
         },
         cancellationToken).ConfigureAwait(false);
-    if (actualUri is null)
-    {
-        return;
-    }
 
-    // download this
-    var path = await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory, cancellationToken).ConfigureAwait(false);
-    if (path is null)
+    if (actualUri is not null)
     {
-        return;
-    }
-
-    var epubInfo = await UpdateEpubInfoAsync(EpubInfo.Parse(path, !IsKePub(extension)), calibreLibrary, forcedSeries, forcedSets, authors, series, sets, programLogger, cancellationToken).ConfigureAwait(false);
-    if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
-    {
-        programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
-        epubInfo.Path.Delete();
-    }
-
-    static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
-    {
-        // create the file name
-        var fileName = uri.GetFileName();
-        var fullPath = Path.GetFullPath(Path.Combine(path, GetHashedName(fileName)));
-        if (!File.Exists(fullPath))
+        // download this
+        if (await DownloadBookAsync(actualUri, outputPath.FullName, programLogger, httpClientFactory, cancellationToken).ConfigureAwait(false) is not { } path)
         {
-            logger.LogInformation("Downloading book {FileName}", fileName);
-            try
-            {
-                await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory, cancellationToken).ConfigureAwait(false);
-            }
-            catch (HttpRequestException ex)
-            {
-                logger.LogError(ex, "{Message}", ex.Message);
-                return default;
-            }
+            return;
         }
 
-        return fullPath;
-
-        static string GetHashedName(string fileName)
+        var epubInfo = await UpdateEpubInfoAsync(EpubInfo.Parse(path, !IsKePub(extension)), calibreLibrary, forcedSeries, forcedSets, authors, series, sets, programLogger, cancellationToken).ConfigureAwait(false);
+        if (await calibreLibrary.AddOrUpdateAsync(epubInfo, maxTimeOffset, cancellationToken).ConfigureAwait(false))
         {
-            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
+            programLogger.LogDebug("Deleting, {Title} - {Authors} - {Extension}", epubInfo.Title, string.Join("; ", epubInfo.Authors), epubInfo.Path.Extension.TrimStart('.'));
+            epubInfo.Path.Delete();
+        }
+
+        static async Task<string?> DownloadBookAsync(Uri uri, string path, Microsoft.Extensions.Logging.ILogger logger, IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+        {
+            // create the file name
+            var fileName = uri.GetFileName();
+            var fullPath = Path.GetFullPath(Path.Combine(path, GetHashedName(fileName)));
+            if (!File.Exists(fullPath))
+            {
+                logger.LogInformation("Downloading book {FileName}", fileName);
+                try
+                {
+                    await uri.DownloadAsFileAsync(fullPath, overwrite: false, httpClientFactory, cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex)
+                {
+                    logger.LogError(ex, "{Message}", ex.Message);
+                    return default;
+                }
+            }
+
+            return fullPath;
+
+            static string GetHashedName(string fileName)
+            {
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:X}", StringComparer.Ordinal.GetHashCode(fileName)) + Path.GetExtension(fileName);
+            }
         }
     }
 }
@@ -818,7 +811,7 @@ static async Task<IEnumerable<string>> GetAuthorsAsync(EBook.Downloader.Calibre.
         foreach (var element in document.RootElement.EnumerateArray())
         {
             if (element.TryGetProperty(Authors, out var authorElement)
-                && authorElement.GetString() is string authors)
+                && authorElement.GetString() is { } authors)
             {
                 foreach (var author in authors.Split('&'))
                 {
