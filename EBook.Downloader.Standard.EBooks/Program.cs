@@ -779,7 +779,7 @@ static ILookup<string, string> Sanitize(IEnumerable<string> value)
 
     static string RemovePunctuation(string text)
     {
-        return string.Concat(text.Where(c => !char.IsPunctuation(c)));
+        return string.Concat(text.Where(c => !char.IsPunctuation(c) && c is not 'ʻ' and not 'ʼ'));
     }
 }
 
