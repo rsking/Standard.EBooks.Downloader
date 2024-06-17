@@ -152,6 +152,9 @@ public record class CalibreBook
 
         static string RemoveOthers(char[] normalizedString, int length)
         {
+            const char SmartStartSingleQuote = (char)699;
+            const char SmartEndSingleQuote = (char)700;
+
             var stringBuilder = new System.Text.StringBuilder();
             var invalidChars = GetInvalidFileNameChars();
 
@@ -163,6 +166,14 @@ public record class CalibreBook
                 {
                     // any space separator should just be a ' ' character
                     _ = stringBuilder.Append(' ');
+                }
+                else if (c is SmartStartSingleQuote)
+                {
+                    _ = stringBuilder.Append('`');
+                }
+                else if (c is SmartEndSingleQuote)
+                {
+                    _ = stringBuilder.Append('\'');
                 }
                 else if (c > 128)
                 {
